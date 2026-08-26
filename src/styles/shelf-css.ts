@@ -136,31 +136,26 @@ html[dark] .v2f-shelf {
 .v2f-shelf__link:hover { background: var(--v2f-surface); }
 .v2f-shelf__link:focus-visible { outline: 2px solid var(--v2f-accent); outline-offset: 2px; }
 
-/* --- the scrolling row ---------------------------------------------------- */
+/* --- the grid ------------------------------------------------------------- */
 
-.v2f-shelf__viewport {
-  position: relative;
-}
+/* Fixed at three columns, so the default six slots land in two tidy rows.
+   minmax(0, ...) rather than a bare width, so the cards can still shrink on a
+   narrow window instead of pushing the page into a horizontal scroll.
 
+   This replaced a horizontal scroller with arrow buttons modelled on YouTube's
+   own shelves. Two rows of three needs no arrows, no scroll position to keep in
+   sync and no overflow measuring, so all of that is gone. */
 .v2f-shelf__track {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, calc(var(--v2f-card-inner) + 18px)));
   gap: var(--v2f-gap);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-behavior: smooth;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  padding-bottom: 4px;
+  justify-content: start;
 }
-
-.v2f-shelf__track::-webkit-scrollbar { display: none; }
 
 /* The card is one measured thumbnail wide plus its frame, so the thumbnail
    inside lines up with the feed's rather than the card's outer edge. */
 .v2f-card {
-  flex: 0 0 calc(var(--v2f-card-inner) + 18px);
   min-width: 0;
-  scroll-snap-align: start;
   position: relative;
   padding: 8px;
   border: 1px solid ${BRAND.accent};
@@ -178,29 +173,6 @@ html:not([dark]) .v2f-card { border-color: rgba(36, 103, 212, 0.4); }
 .v2f-card--empty { border-style: dashed; }
 .v2f-card--empty:hover { background: transparent; }
 
-/* Arrows, same idea as YouTube's own shelves. Hidden until they are needed. */
-.v2f-shelf__arrow {
-  position: absolute;
-  top: 0;
-  bottom: 40px;
-  width: 40px;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: var(--v2f-page);
-  color: var(--v2f-text);
-  cursor: pointer;
-  z-index: 2;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.v2f-shelf__viewport:hover .v2f-shelf__arrow[data-enabled="1"] { opacity: 1; }
-.v2f-shelf__arrow[data-enabled="1"] { display: flex; }
-.v2f-shelf__arrow--prev { left: -8px; }
-.v2f-shelf__arrow--next { right: -8px; }
-.v2f-shelf__arrow:focus-visible { opacity: 1; outline: 2px solid var(--v2f-accent); }
 
 /* --- one card ------------------------------------------------------------- */
 

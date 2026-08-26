@@ -19,11 +19,13 @@ import type { CachedState, ShelfItem } from '@/shared/types'
 
 const SHELF_KEY = 'shelf'
 
-/** Used only when YouTube's own tiles cannot be measured. */
-const FALLBACK_COLUMNS = 3
+/** Fixed layout: three per row, wrapping into as many rows as there are slots. */
+const COLUMNS = 3
 const CARD_GAP = 16
 /** Padding plus border the accent frame adds around a card, left and right. */
 const CARD_FRAME = 18
+/** Cards sit a touch inside YouTube's own thumbnail size, by request. */
+const SHRINK = 0.92
 
 /**
  * Whether the empty slots are collapsed. Mirrored into a module variable
@@ -51,9 +53,6 @@ function handleResize(): void {
   const shelf = document.querySelector<HTMLElement>(`[data-v2f~="${SHELF_KEY}"]`)
   if (!shelf) return
   applyCardWidth(shelf)
-  const viewport = shelf.querySelector<HTMLElement>('.v2f-shelf__viewport')
-  const track = shelf.querySelector<HTMLElement>('.v2f-shelf__track')
-  if (viewport && track) updateArrows(viewport, track)
 }
 
 /** Called on every navigation and on every state change. Cheap and idempotent. */
@@ -153,16 +152,11 @@ function buildShelf(state: CachedState): HTMLElement {
     for (let i = 0; i < emptyCount; i += 1) track.append(buildPlaceholder())
   }
 
-  const viewport = el('div', { class: 'v2f-shelf__viewport' }, [
-    arrowButton('prev', track),
-    track,
-    arrowButton('next', track),
-  ])
-  shelf.append(viewport)
+  shelf.append(track)
 
-  track.addEventListener('scroll', () => updateArrows(viewport, track), { passive: true })
-  // Wait a frame so the browser has laid the track out before measuring it.
-  requestAnimationFrame(() => updateArrows(viewport, track))
+  // YouTube's feed is not laid out yet on a cold page load, so the first
+  // measurement can miss. One retry after a frame is enough.
+  requestAnimationFrame(() => applyCardWidth(shelf))
 
   return shelf
 }
@@ -319,30 +313,30 @@ async function dismiss(item: ShelfItem): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Sizes our cards to YouTube's own, by measuring one instead of guessing.
+ * Sizes the cards from one of YouTube's own thumbnails rather than from a
+ * guessed column count.
  *
- * The previous version divided the container by a fixed 320px and hoped that
- * matched YouTube's column count. It usually did not: YouTube's grid depends on
- * the sidebar state, the zoom level and its own breakpoints, so our cards ended
- * up a little smaller or larger than the feed right below them, which is
- * exactly the kind of not-quite-right that makes an injected UI look injected.
+ * Guessing does not work: YouTube's grid depends on the sidebar state, the zoom
+ * level and its own breakpoints, so a hardcoded width lands slightly off from
+ * the feed right below it - the kind of not-quite-right that makes injected UI
+ * look injected. Measuring is immune to all of it.
  *
- * Measuring a real thumbnail is immune to all of that. The card is that width
- * plus the accent frame, so the THUMBNAILS line up with the feed's, which is
- * the part the eye actually compares.
+ * SHRINK then takes the cards a little under that, so the shelf reads as its
+ * own section rather than as more feed. The layout itself is fixed at three
+ * columns, so six slots always fall into two tidy rows.
  */
 function applyCardWidth(shelf: HTMLElement): void {
   const measured = measureYouTubeThumbnail()
 
   if (measured) {
-    shelf.style.setProperty('--v2f-card-inner', `${Math.round(measured)}px`)
+    shelf.style.setProperty('--v2f-card-inner', `${Math.round(measured * SHRINK)}px`)
     return
   }
 
   // No feed to measure yet (first paint, or YouTube changed its markup).
   const container = shelf.clientWidth || document.documentElement.clientWidth
-  const width = (container - CARD_GAP * (FALLBACK_COLUMNS - 1)) / FALLBACK_COLUMNS - CARD_FRAME
-  shelf.style.setProperty('--v2f-card-inner', `${Math.max(160, Math.floor(width))}px`)
+  const width = (container - CARD_GAP * (COLUMNS - 1)) / COLUMNS - CARD_FRAME
+  shelf.style.setProperty('--v2f-card-inner', `${Math.max(160, Math.floor(width * SHRINK))}px`)
 }
 
 /** Width of the first of YouTube's own thumbnails in the feed, in pixels. */
@@ -362,33 +356,6 @@ function measureYouTubeThumbnail(): number | null {
   }
 
   return null
-}
-
-function arrowButton(direction: 'prev' | 'next', track: HTMLElement): HTMLElement {
-  const button = el('button', {
-    class: `v2f-shelf__arrow v2f-shelf__arrow--${direction}`,
-    type: 'button',
-    'aria-label': direction === 'prev' ? 'Scroll left' : 'Scroll right',
-  })
-  button.innerHTML =
-    direction === 'prev'
-      ? '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>'
-      : '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>'
-
-  button.addEventListener('click', () => {
-    track.scrollBy({ left: direction === 'prev' ? -track.clientWidth : track.clientWidth })
-  })
-
-  return button
-}
-
-function updateArrows(viewport: HTMLElement, track: HTMLElement): void {
-  const prev = viewport.querySelector<HTMLElement>('.v2f-shelf__arrow--prev')
-  const next = viewport.querySelector<HTMLElement>('.v2f-shelf__arrow--next')
-  const maxScroll = track.scrollWidth - track.clientWidth
-
-  if (prev) prev.dataset.enabled = track.scrollLeft > 8 ? '1' : '0'
-  if (next) next.dataset.enabled = track.scrollLeft < maxScroll - 8 ? '1' : '0'
 }
 
 /** Exported for the orchestrator: has the shelf been put on the page already. */
