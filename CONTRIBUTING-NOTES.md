@@ -107,10 +107,16 @@ YouTube eine schlechte Idee.
 
 **Der Bezug vom offenen Menü zur Videokachel.** YouTube benutzt einen einzigen
 `ytd-menu-popup-renderer` für alle Menüs und befüllt ihn neu. Wenn das Menü
-offen ist, führt kein Weg mehr zurück zur Kachel. Meine Lösung: beim `mousedown`
-auf den Drei-Punkte-Button in der Capture-Phase merken, zu welcher Kachel er
-gehört. Das funktioniert zuverlässig, hängt aber daran, dass der Klick über ein
-`ytd-menu-renderer` läuft. Wenn hier etwas kaputt geht, ist es das.
+offen ist, führt kein Weg mehr zurück zur Kachel. Lösung: bei jedem
+`pointerdown` in der Capture-Phase merken, in welcher Kachel geklickt wurde,
+über `event.composedPath()` statt `closest()`, weil letzteres keine
+Shadow-DOM-Grenzen überschreitet.
+
+Der erste Versuch verlangte, dass der Klick durch ein `ytd-menu-renderer` läuft.
+Das benutzen nur noch die Suchergebnisse; Startseite und Kanalseiten sind auf
+`yt-lockup-view-model` umgestellt, und dort fehlte der Eintrag deshalb
+komplett. Falls hier wieder etwas bricht, ist die Liste in `selectors.ts` unter
+`videoTile` der richtige Ort.
 
 **Das Schließen des YouTube-Menüs nach dem Klick.** Ich rufe `close()` auf dem
 `tp-yt-iron-dropdown` auf, das ist eine Polymer-interne Methode. Fallback ist
