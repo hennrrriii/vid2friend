@@ -139,6 +139,30 @@ zeigt dann einen Hinweis auf das Toolbar-Icon.
 
 ---
 
+## Der Fehler, der am meisten Zeit gekostet hat
+
+**Der Service Worker führte das Content Script aus.** Beide Einstiegsdateien
+hießen `index.ts`. CRXJS ordnet Einstiegspunkte über den Dateinamen ihrem
+gebauten Bundle zu, und bei diesem Namenskonflikt zeigte
+`service-worker-loader.js` auf den Chunk des Content Scripts. Der Service Worker
+registrierte damit nie einen `chrome.runtime.onMessage`-Listener, also
+scheiterte jeder Aufruf aus einem YouTube-Tab mit "vid2friend is not
+responding". Das Popup funktionierte weiter, weil es einen eigenen
+Supabase-Client hat und den Worker gar nicht braucht.
+
+Kein Fehler im Build, kein Fehler im Manifest, nichts in `dist/` sah falsch aus.
+Deshalb heißen die Dateien jetzt `service-worker.ts` und `content-script.ts`,
+und `scripts/check-bundle.mjs` prüft nach jedem Build, dass hinter jedem Loader
+auch wirklich der passende Code steckt. Der Check läuft in `npm run build` und
+in beiden GitHub-Workflows mit.
+
+Verschärft hatte ich das anfangs selbst durch ein
+`rollupOptions.output.chunkFileNames: 'assets/chunk-[hash].js'` in
+`vite.config.ts`, das alle Namen auf einen reinen Hash reduzierte. Das ist
+wieder raus, mit einem Kommentar an Ort und Stelle.
+
+---
+
 ## Stolpersteine beim Aufsetzen
 
 **`npm install` crasht mit `edgesOut`.** npm 10.9 verschluckt sich an den

@@ -48,15 +48,20 @@ export function createManifest(env: Record<string, string>) {
       },
     },
 
+    // The two entry file names must differ. CRXJS maps each entry to its
+    // emitted bundle by file name, and when both were called index.ts it wired
+    // service-worker-loader.js to the content script's chunk. The service
+    // worker then registered no message listener at all, so every request from
+    // a YouTube tab failed with "vid2friend is not responding".
     background: {
-      service_worker: 'src/background/index.ts',
+      service_worker: 'src/background/service-worker.ts',
       type: 'module',
     },
 
     content_scripts: [
       {
         matches: ['https://www.youtube.com/*'],
-        js: ['src/content/index.ts'],
+        js: ['src/content/content-script.ts'],
         // document_idle keeps us out of YouTube's critical rendering path.
         run_at: 'document_idle',
       },

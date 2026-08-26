@@ -19,6 +19,7 @@ export async function checkConnectLink(): Promise<void> {
   try {
     const code = readCode()
     if (!code) return
+    log.info('invite code found:', code)
 
     // Take the parameter out of the URL first, so a refresh does not ask again
     // and the code does not stay in the address bar.
@@ -49,11 +50,40 @@ export async function checkConnectLink(): Promise<void> {
   }
 }
 
+/**
+ * Looks for the code in three places, in this order.
+ *
+ * The third one is the important one. The content script runs at
+ * document_idle, and YouTube's app rewrites the address bar during startup, so
+ * by the time we look, `?v2f=` can already be gone from `location`. The
+ * navigation timing entry still remembers the URL the document was actually
+ * loaded with, which survives any number of history.replaceState calls.
+ */
 function readCode(): string | null {
-  const fromQuery = new URLSearchParams(location.search).get('v2f')
-  const fromHash = new URLSearchParams(location.hash.replace(/^#/, '')).get('v2f')
-  const candidate = (fromQuery ?? fromHash ?? '').trim().toUpperCase()
-  return CODE_PATTERN.test(candidate) ? candidate : null
+  const urls: string[] = [location.href]
+
+  try {
+    const nav = performance.getEntriesByType('navigation')[0] as
+      | PerformanceNavigationTiming
+      | undefined
+    if (nav?.name) urls.push(nav.name)
+  } catch {
+    /* navigation timing is not available; the two above will have to do */
+  }
+
+  for (const href of urls) {
+    try {
+      const url = new URL(href, location.origin)
+      const fromQuery = url.searchParams.get('v2f')
+      const fromHash = new URLSearchParams(url.hash.replace(/^#/, '')).get('v2f')
+      const candidate = (fromQuery ?? fromHash ?? '').trim().toUpperCase()
+      if (CODE_PATTERN.test(candidate)) return candidate
+    } catch {
+      /* not a parseable URL, try the next candidate */
+    }
+  }
+
+  return null
 }
 
 function stripCode(): void {
@@ -128,6 +158,12 @@ function confirmDialog(
           </div>
         </div>
       </div>`
+
+    // Keystrokes must not reach YouTube's global shortcut handlers. See the
+    // comment on containKeyEvents in share-modal.ts.
+    for (const type of ['keydown', 'keyup', 'keypress'] as const) {
+      host.addEventListener(type, (event) => event.stopPropagation())
+    }
 
     document.body.append(host)
 

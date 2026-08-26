@@ -28,6 +28,7 @@ export async function openShareModal(meta: VideoMeta): Promise<void> {
   host.setAttribute('data-v2f', 'modal')
   const shadow = host.attachShadow({ mode: 'open' })
   shadow.append(styleElement())
+  containKeyEvents(host)
   document.body.append(host)
 
   const overlay = document.createElement('div')
@@ -62,6 +63,24 @@ export function isShareModalOpen(): boolean {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Stops keystrokes inside the dialog from reaching YouTube.
+ *
+ * Shadow DOM isolates styles, not events. Worse: when an event crosses the
+ * shadow boundary it is retargeted, so YouTube's document level shortcut
+ * handlers see `event.target` as our host <div> rather than an <input>. Their
+ * usual "ignore this, the user is typing" check therefore does not fire, and
+ * typing a note would seek the video, mute it and open the caption menu.
+ *
+ * Listening on the host in the bubble phase is the right place: the event has
+ * already reached our input, and it stops before it ever gets to document.
+ */
+function containKeyEvents(element: HTMLElement): void {
+  for (const type of ['keydown', 'keyup', 'keypress'] as const) {
+    element.addEventListener(type, (event) => event.stopPropagation())
+  }
+}
 
 function onKeydown(event: KeyboardEvent): void {
   if (!host) return
@@ -107,9 +126,12 @@ function wireNoteCounter(dialog: HTMLElement): void {
   })
 }
 
+/** Above this many friends the list stops being scannable and gets a filter. */
+const FILTER_THRESHOLD = 10
+
 async function populateFriends(dialog: HTMLElement, meta: VideoMeta): Promise<void> {
   const list = dialog.querySelector<HTMLElement>('.friends')
-  const search = dialog.querySelector<HTMLInputElement>('.search')
+  const searchSlot = dialog.querySelector<HTMLElement>('.search-slot')
   const submit = dialog.querySelector<HTMLButtonElement>('.submit')
   if (!list || !submit) return
 
@@ -144,46 +166,69 @@ async function populateFriends(dialog: HTMLElement, meta: VideoMeta): Promise<vo
 
   const selected = new Set<string>()
 
+  const syncSubmit = () => {
+    submit.disabled = selected.size === 0
+    submit.textContent = selected.size > 1 ? `Share with ${selected.size}` : 'Share'
+  }
+
   const draw = (filter: string) => {
     const needle = filter.trim().toLowerCase()
-    const visible = friends.filter((f) => f.profile.username.toLowerCase().includes(needle))
+    const visible = needle
+      ? friends.filter((f) => f.profile.username.toLowerCase().includes(needle))
+      : friends
 
     if (visible.length === 0) {
       list.innerHTML = '<p class="empty">No friend matches that.</p>'
       return
     }
 
+    // Rows are buttons, not checkboxes in labels. Clicking anywhere on the row
+    // toggles it, and there is nothing here that wants keyboard input.
     list.innerHTML = visible
       .map((friend) => {
         const queued = alreadyQueued.includes(friend.profile.id)
+        const on = selected.has(friend.profile.id)
         return `
-          <label class="friend">
-            <input type="checkbox" value="${friend.profile.id}" ${
-              selected.has(friend.profile.id) ? 'checked' : ''
-            } />
+          <button type="button" class="friend${on ? ' is-selected' : ''}"
+                  data-id="${escapeHtml(friend.profile.id)}" aria-pressed="${on}">
             <span class="avatar" style="background:${escapeHtml(friend.profile.avatar_color)}">${escapeHtml(
               friend.profile.username.slice(0, 1).toUpperCase(),
             )}</span>
             <span class="name">${escapeHtml(friend.profile.username)}</span>
-            ${queued ? '<span class="hint">already has this one waiting</span>' : ''}
-          </label>`
+            ${queued ? '<span class="hint">already waiting</span>' : ''}
+            <span class="tick" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+            </span>
+          </button>`
       })
       .join('')
 
-    list.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
-      box.addEventListener('change', () => {
-        if (box.checked) selected.add(box.value)
-        else selected.delete(box.value)
-        submit.disabled = selected.size === 0
-        submit.textContent = selected.size > 1 ? `Share with ${selected.size}` : 'Share'
+    list.querySelectorAll<HTMLButtonElement>('.friend').forEach((row) => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.id
+        if (!id) return
+        if (selected.has(id)) selected.delete(id)
+        else selected.add(id)
+        row.classList.toggle('is-selected', selected.has(id))
+        row.setAttribute('aria-pressed', String(selected.has(id)))
+        syncSubmit()
       })
     })
   }
 
+  // Only worth a search box once scanning the list stops being faster.
+  if (friends.length > FILTER_THRESHOLD && searchSlot) {
+    const search = document.createElement('input')
+    search.className = 'search'
+    search.type = 'search'
+    search.placeholder = 'Filter friends'
+    search.setAttribute('aria-label', 'Filter friends')
+    search.addEventListener('input', () => draw(search.value))
+    searchSlot.append(search)
+  }
+
   draw('')
-  submit.disabled = true
-  search?.addEventListener('input', () => draw(search.value))
-  search?.focus()
+  syncSubmit()
 
   submit.addEventListener('click', () => {
     void doShare(dialog, meta, [...selected], friends)
@@ -282,7 +327,7 @@ function shellHtml(meta: VideoMeta): string {
         </div>
       </div>
 
-      <input class="search" type="search" placeholder="Search friends" aria-label="Search friends" />
+      <div class="search-slot"></div>
       <div class="friends"><p class="empty">Loading...</p></div>
 
       <div class="note-row">
@@ -336,14 +381,20 @@ function styleElement(): HTMLStyleElement {
       background: #1c1f26; color: inherit; font-size: 13px;
     }
     .search:focus { outline: none; border-color: ${BRAND.accent}; }
+    .search-slot:empty { display: none; }
 
-    .friends { flex: 1 1 auto; overflow-y: auto; max-height: 200px; min-height: 60px; }
+    .friends { flex: 1 1 auto; overflow-y: auto; max-height: 220px; min-height: 60px; }
     .friend {
-      display: flex; align-items: center; gap: 10px;
-      padding: 7px 8px; border-radius: 8px; cursor: pointer;
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      padding: 9px 10px; margin-bottom: 2px;
+      border: 1px solid transparent; border-radius: 8px;
+      background: #1c1f26; color: inherit;
+      font: inherit; font-size: 14px; text-align: left; cursor: pointer;
     }
-    .friend:hover { background: #1c1f26; }
-    .friend input { accent-color: ${BRAND.primary}; width: 16px; height: 16px; }
+    .friend:hover { background: #23262e; }
+    .friend.is-selected { border-color: ${BRAND.primary}; background: rgba(36, 103, 212, 0.18); }
+    .tick { margin-left: auto; color: ${BRAND.accent}; opacity: 0; display: flex; }
+    .friend.is-selected .tick { opacity: 1; }
     .avatar {
       width: 26px; height: 26px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;

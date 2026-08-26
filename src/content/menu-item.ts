@@ -6,14 +6,25 @@
  * on the page and simply re-populates it, so by the time the menu is open there
  * is no link left from the popup back to the tile.
  *
- * The reliable trick: remember the tile at mousedown on the three dot button,
- * in the capture phase, before YouTube does anything. That element is the
- * answer, and it is still the answer when the menu finishes opening.
+ * The reliable trick: remember the tile on `pointerdown`, in the capture phase,
+ * before YouTube does anything. Whatever was last clicked is what the menu
+ * belongs to.
+ *
+ * Two things this used to get wrong, both worth knowing before changing it:
+ *
+ *   1. It only recorded clicks that passed through a `ytd-menu-renderer`.
+ *      Search results still use that component, but the homepage and channel
+ *      pages have moved to `yt-lockup-view-model`, where the overflow button is
+ *      not wrapped in one. Result: the entry appeared only after a search. Now
+ *      every pointerdown records its tile, or clears it when there is none.
+ *
+ *   2. `Element.closest()` does not cross shadow roots, and parts of YouTube
+ *      are inside them. `event.composedPath()` does, so we walk that instead.
  */
-import { claim, closestTile, el, parseDuration, pickQuiet, textOf, videoIdFromUrl } from './dom'
+import { claim, el, parseDuration, pickQuiet, textOf, videoIdFromUrl } from './dom'
+import { SELECTORS } from './selectors'
 import { openShareModal } from './share-modal'
 import { log } from '@/shared/log'
-import { BRAND } from '@/shared/brand'
 import type { VideoMeta } from '@/shared/types'
 
 const ITEM_KEY = 'menu-item'
@@ -21,44 +32,85 @@ const ITEM_KEY = 'menu-item'
 let lastTile: Element | null = null
 
 export function initMenuItem(): void {
+  // pointerdown rather than mousedown: same timing, but it also covers touch
+  // and pen input.
   document.addEventListener(
-    'mousedown',
+    'pointerdown',
     (event) => {
       try {
-        const target = event.target
-        if (!(target instanceof Element)) return
-        const menu = target.closest('ytd-menu-renderer')
-        if (!menu) return
-        lastTile = closestTile(menu)
+        lastTile = tileFromEvent(event)
       } catch (error) {
-        log.debug('menu host tracking failed', error)
+        lastTile = null
+        log.debug('tile tracking failed', error)
       }
     },
     true,
   )
+
+  // A soft navigation invalidates whatever tile we were remembering.
+  document.addEventListener('yt-navigate-finish', () => {
+    lastTile = null
+  })
 }
 
-/** Called on every DOM settle. Cheap when the menu is closed. */
+/** Walks the composed path for the first element that is a video tile. */
+function tileFromEvent(event: Event): Element | null {
+  const selector = SELECTORS.videoTile.join(',')
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : []
+
+  for (const node of path) {
+    if (!(node instanceof Element)) continue
+    try {
+      if (node.matches(selector)) return node
+    } catch {
+      /* a selector YouTube's parser dislikes; try the next one */
+    }
+  }
+
+  // Fallback for browsers or events without a composed path.
+  const target = event.target
+  return target instanceof Element ? target.closest(selector) : null
+}
+
+/** Called on every DOM settle. Cheap when no menu is open. */
 export function injectMenuItem(): void {
   try {
     const popup = pickQuiet('menuPopup')
-    if (!popup) return
+    if (!popup || !isVisible(popup)) return
 
-    // Not a video tile menu (account menu, playlist menu, ...): leave it alone.
-    if (!lastTile) return
+    // Not a video tile menu (account menu, watch page overflow, ...).
+    if (!lastTile?.isConnected) return
 
     const list = pickQuiet('menuList', popup)
     if (!list) return
-    if (list.querySelector(`[data-v2f~="${ITEM_KEY}"]`)) return
 
     const meta = metaFromTile(lastTile)
     if (!meta) return
 
-    const item = buildItem(meta)
-    list.append(item)
+    // The popup is recycled between videos, so an entry left over from the
+    // previous menu would share the wrong video. Stamp it and replace it when
+    // the video changes.
+    const existing = list.querySelector(`[data-v2f~="${ITEM_KEY}"]`)
+    if (existing) {
+      if (existing.getAttribute('data-v2f-video') === meta.videoId) return
+      existing.remove()
+    }
+
+    list.append(buildItem(meta))
   } catch (error) {
     log.error('menu item injection failed', error)
   }
+}
+
+/**
+ * YouTube keeps the dropdown in the DOM and hides it instead of removing it.
+ * Injecting into a hidden popup would silently attach our entry to the wrong
+ * video the next time it opens.
+ */
+function isVisible(element: Element): boolean {
+  const rect = element.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return false
+  return element.closest('[aria-hidden="true"]') === null
 }
 
 function buildItem(meta: VideoMeta): HTMLElement {
@@ -67,14 +119,18 @@ function buildItem(meta: VideoMeta): HTMLElement {
     <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
   </svg>`
 
-  const item = el('div', {
-    class: 'v2f-menu-item',
-    role: 'menuitem',
-    tabindex: '0',
-  }, [icon, el('span', {}, ['Share with friends'])])
+  const item = el(
+    'div',
+    {
+      class: 'v2f-menu-item',
+      role: 'menuitem',
+      tabindex: '0',
+      'data-v2f-video': meta.videoId,
+    },
+    [icon, el('span', {}, ['Share with friends'])],
+  )
 
   claim(item, ITEM_KEY)
-  item.style.setProperty('--v2f-accent', BRAND.accent)
 
   const activate = (event: Event) => {
     event.preventDefault()

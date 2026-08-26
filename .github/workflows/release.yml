@@ -35,6 +35,9 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: npx vite build
 
+      - name: Check the bundle wiring
+        run: node scripts/check-bundle.mjs
+
       - name: Pack
         run: cd dist && zip -r ../vid2friend-${{ github.ref_name }}.zip .
 

@@ -35,6 +35,11 @@ jobs:
       - name: Build
         run: npx vite build
 
+      # Catches the class of bug where the manifest looks right but a loader
+      # points at the wrong chunk. See scripts/check-bundle.mjs.
+      - name: Check the bundle wiring
+        run: node scripts/check-bundle.mjs
+
       - name: Check the bundled SQL is up to date
         run: |
           npm run sql:bundle

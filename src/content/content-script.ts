@@ -37,6 +37,11 @@ async function boot(): Promise<void> {
   injectStyles()
   initMenuItem()
 
+  // Before anything that awaits the network. An invite link is the first thing
+  // a new user ever does, and making them wait on a refresh that may fail is a
+  // good way to make it look broken.
+  void checkConnectLink()
+
   // Paints from the cache; the refresh inside initState corrects it moments
   // later. A slow network delays accuracy, never the first render.
   await initState()
@@ -48,8 +53,6 @@ async function boot(): Promise<void> {
     injectWatchButton()
     syncWatchTracker()
   })
-
-  void checkConnectLink()
 
   log.info('ready on', location.pathname)
 }

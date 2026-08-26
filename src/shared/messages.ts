@@ -58,20 +58,56 @@ export interface ResponseMap {
 export async function send<K extends Request['type']>(
   request: Extract<Request, { type: K }>,
 ): Promise<ResponseMap[K]> {
-  let response: Response<ResponseMap[K]> | undefined
-  try {
-    response = (await chrome.runtime.sendMessage(request)) as
-      | Response<ResponseMap[K]>
-      | undefined
-  } catch (error) {
-    throw new Error(
-      error instanceof Error && error.message.includes('Extension context invalidated')
-        ? 'vid2friend was reloaded. Refresh this page.'
-        : 'vid2friend is not responding. Try reloading the page.',
-    )
+  // One retry, then give up. MV3 terminates the service worker aggressively;
+  // the first message after that is supposed to wake it, but occasionally
+  // arrives while it is still starting and comes back with no receiver. A
+  // single retry a moment later turns that into a non-event.
+  let lastError: unknown
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 350))
+    try {
+      const response = (await chrome.runtime.sendMessage(request)) as
+        | Response<ResponseMap[K]>
+        | undefined
+      if (!response) throw new Error('no response')
+      if (!response.ok) throw new Error(response.error)
+      return response.data
+    } catch (error) {
+      // An error the service worker deliberately sent back is a real answer,
+      // not a transport problem. Do not retry those.
+      if (isApplicationError(error)) throw error
+      lastError = error
+    }
   }
 
-  if (!response) throw new Error('vid2friend is not responding. Try reloading the page.')
-  if (!response.ok) throw new Error(response.error)
-  return response.data
+  throw new Error(describeTransportFailure(lastError))
+}
+
+/** True for errors our own handler produced, as opposed to Chrome messaging. */
+function isApplicationError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const message = error.message
+  if (message === 'no response') return false
+  return !TRANSPORT_HINTS.some((hint) => message.includes(hint))
+}
+
+const TRANSPORT_HINTS = [
+  'Extension context invalidated',
+  'Could not establish connection',
+  'Receiving end does not exist',
+  'message port closed',
+  'The message port closed',
+]
+
+function describeTransportFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+
+  if (message.includes('Extension context invalidated')) {
+    return 'vid2friend was reloaded. Refresh this page (F5).'
+  }
+  return (
+    'vid2friend could not reach its background service. ' +
+    'Open chrome://extensions, click Reload on vid2friend, then refresh this page. ' +
+    'If it keeps happening, click "Service Worker" there to see the actual error.'
+  )
 }

@@ -25,12 +25,13 @@ export default defineConfig(({ mode }) => {
       // Extension review is easier when the shipped code is readable-ish, and
       // sourcemaps never leave our machine (they are gitignored with dist/).
       sourcemap: mode !== 'production',
-      rollupOptions: {
-        output: {
-          // Stable-ish names make it obvious in chrome://extensions what loaded.
-          chunkFileNames: 'assets/chunk-[hash].js',
-        },
-      },
+      // Do NOT override rollupOptions.output.chunkFileNames here. CRXJS maps
+      // each entry (service worker, content script) to its emitted file by
+      // name, and renaming chunks to a bare hash made it wire
+      // service-worker-loader.js to the content script's chunk instead. The
+      // symptom was a service worker with no message listener at all, so every
+      // call from a YouTube tab failed with "not responding".
+      
     },
     server: {
       // CRXJS needs a fixed port for HMR into the extension context.
