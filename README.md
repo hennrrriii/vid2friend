@@ -205,11 +205,18 @@ Tabellennamen steht ein grünes Schloss-Symbol mit `RLS enabled`.
 
 **Optional, aber empfehlenswert:** die Sicherheitsregeln selbst testen. Kopiere
 [`supabase/tests/rls_test.sql`](supabase/tests/rls_test.sql) in den SQL Editor
-und führe es aus. Das Skript legt drei Testnutzer an, prüft, dass keiner die
-Daten der anderen lesen oder verändern kann, und macht am Ende ein `ROLLBACK`.
-Es hinterlässt also nichts. Am Ende erscheint in den Meldungen
-`RLS TEST SUITE PASSED`. Schlägt eine Prüfung fehl, bricht es mit
-`RLS TEST FAILED: <welche>` ab.
+und führe es aus. Das Skript legt drei Testnutzer an, prüft vierzehnmal, dass
+keiner die Daten der anderen lesen oder verändern kann, und macht am Ende ein
+`ROLLBACK`. Es hinterlässt also nichts und ist auch gegen die produktive
+Datenbank gefahrlos.
+
+Erwartetes Ergebnis: eine Tabelle mit vierzehn Zeilen, in der ersten Spalte
+überall `PASS`. Schlägt eine Prüfung fehl, bricht das Skript sofort rot ab mit
+`RLS TEST FAILED: <welche Prüfung>`, und die Tabelle erscheint gar nicht erst.
+
+> Der Supabase SQL Editor zeigt `RAISE NOTICE` nicht an. Verlass dich also auf
+> die Ergebnistabelle, nicht auf Meldungen. In `psql` siehst du zusätzlich jede
+> einzelne Prüfung mitlaufen.
 
 ---
 

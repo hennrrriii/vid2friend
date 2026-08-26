@@ -11,8 +11,13 @@
 --
 --   psql "$DATABASE_URL" -f supabase/tests/rls_test.sql
 --
--- Success looks like: "RLS TEST SUITE PASSED" in the notices, and no error.
--- A failure raises immediately and names the assertion that broke.
+-- Success looks like a table of fourteen rows, all saying PASS.
+-- A failure aborts immediately with "RLS TEST FAILED: <which assertion>".
+--
+-- The summary at the end is a plain SELECT rather than RAISE NOTICE output,
+-- because the Supabase SQL editor does not display notices at all. Reaching
+-- that statement is itself the proof: any failed assertion raises, which rolls
+-- the transaction back before it can ever run.
 --
 -- Note on the SET statements below: they are deliberately at the top level and
 -- not wrapped in a helper function. PostgreSQL restores GUC values, including
@@ -191,6 +196,25 @@ select pg_temp.check(
 
 reset role;
 
-do $$ begin raise notice 'RLS TEST SUITE PASSED'; end; $$;
+-- =========================================================================
+-- Summary
+-- =========================================================================
+select 'PASS' as result, assertion
+from unnest(array[
+  'alice sees exactly one profile: her own',
+  'alice cannot read bob''s profile row',
+  'alice cannot read anyone''s recovery token but her own',
+  'alice cannot see the friendship between bob and carol',
+  'alice can only rename herself, not others',
+  'alice cannot share with a non-friend',
+  'bob sees himself and carol',
+  'the share became active in slot 0',
+  'sender cannot mark his own share watched',
+  'direct UPDATE on shares is refused',
+  'carol sees the share addressed to her',
+  'recipient can mark a share watched',
+  'a watched share holds no slot any more',
+  'alice cannot see shares between bob and carol'
+]) as assertion;
 
 rollback;
