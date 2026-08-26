@@ -1,30 +1,30 @@
 /**
  * "Share with friends" as an extra entry in the three dot menu of a video tile.
  *
- * Two problems, solved independently:
+ * Three separate problems live here, and each of them broke the feature on its
+ * own at some point:
  *
- *   1. WHICH video does the open menu belong to? YouTube reuses one
- *      `ytd-menu-popup-renderer` for every menu on the page and simply
- *      re-populates it, so once the menu is open there is no link left back to
- *      the tile. Fixed by remembering the tile on `pointerdown`, in the capture
+ *   1. WHICH video does the open menu belong to? YouTube reuses its menus and
+ *      re-populates them, so once one is open there is no link back to the
+ *      tile. Fixed by remembering the tile on `pointerdown` in the capture
  *      phase, via `event.composedPath()` rather than `closest()` - the latter
- *      does not cross shadow roots, and the newer `yt-lockup-view-model` tiles
- *      (homepage, channel pages) use real shadow DOM.
+ *      does not cross shadow roots, and the newer tile components use them.
  *
- *   2. WHEN does the popup actually appear in a way we can detect? The
- *      page-wide MutationObserver in dom.ts only watches childList changes.
- *      Search results create the popup fresh each time, which is a childList
- *      change and got picked up. The homepage and channel pages instead reuse
- *      one hidden popup and reveal it by toggling an attribute - no childList
- *      change at all, so the entry silently never appeared there. Fixed by
- *      scheduling a handful of direct rechecks after every tile click,
- *      independent of what kind of mutation opened the menu.
+ *   2. WHEN is the menu detectable? The page-wide MutationObserver in dom.ts
+ *      only watches childList changes. Some pages build the menu fresh (a
+ *      childList change), others reveal a hidden one by toggling an attribute
+ *      (no childList change at all). Fixed by also rechecking on a few short
+ *      timers after every tile click.
+ *
+ *   3. WHERE do we insert? See openMenuList() below. Short version: YouTube
+ *      runs two different menu implementations at the same time, so we look for
+ *      the menu's entries instead of for the menu.
  */
 import { claim, el, parseDuration, pickQuiet, textOf, videoIdFromUrl } from './dom'
 import { logoMarkSvg } from '@/shared/brand'
 import { SELECTORS } from './selectors'
 import { openShareModal } from './share-modal'
-import { log } from '@/shared/log'
+import { log, warnOnce } from '@/shared/log'
 import type { VideoMeta } from '@/shared/types'
 
 const ITEM_KEY = 'menu-item'
@@ -91,23 +91,27 @@ function tileFromEvent(event: Event): Element | null {
   return target instanceof Element ? target.closest(selector) : null
 }
 
-/** Called on every DOM settle. Cheap when no menu is open. */
+/** Called on every DOM settle, and on a few timers after each tile click. */
 export function injectMenuItem(): void {
   try {
-    const popup = pickQuiet('menuPopup')
-    if (!popup || !isVisible(popup)) return
-
-    // Not a video tile menu (account menu, watch page overflow, ...).
+    // Not a video tile menu (account menu, watch page overflow, sort menu, ...).
     if (!lastTile?.isConnected) return
 
-    const list = pickQuiet('menuList', popup)
+    const list = openMenuList()
     if (!list) return
 
     const meta = metaFromTile(lastTile)
-    if (!meta) return
+    if (!meta) {
+      warnOnce(
+        'menu-meta',
+        'found an open menu but could not read the video from its tile. ' +
+          'Check the tileLink selectors in src/content/selectors.ts.',
+      )
+      return
+    }
 
-    // The popup is recycled between videos, so an entry left over from the
-    // previous menu would share the wrong video. Stamp it and replace it when
+    // Menus are recycled between videos, so an entry left over from the
+    // previous one would share the wrong video. Stamp it and replace it when
     // the video changes.
     const existing = list.querySelector(`[data-v2f~="${ITEM_KEY}"]`)
     if (existing) {
@@ -122,13 +126,48 @@ export function injectMenuItem(): void {
 }
 
 /**
- * YouTube keeps the dropdown in the DOM and hides it instead of removing it.
- * Injecting into a hidden popup would silently attach our entry to the wrong
- * video the next time it opens.
+ * Finds the container of the currently open menu, by looking for its entries
+ * rather than for the menu itself.
+ *
+ * Why not just select the popup: YouTube ships at least two menu
+ * implementations at once. Search results still use the Polymer
+ * `ytd-menu-popup-renderer` with a `tp-yt-paper-listbox#items` inside; the
+ * homepage and channel pages use a newer view-model based menu with neither of
+ * those. Selecting on the wrapper therefore worked on exactly one kind of page,
+ * which is precisely the bug this replaced.
+ *
+ * Entries, on the other hand, all look alike enough to enumerate. Whichever
+ * element is the parent of the most VISIBLE entries is the open menu. The
+ * visibility filter matters because YouTube keeps closed menus in the DOM.
  */
+function openMenuList(): Element | null {
+  const selector = SELECTORS.menuItem.join(',')
+
+  const counts = new Map<Element, number>()
+  for (const item of document.querySelectorAll(selector)) {
+    if (!isVisible(item)) continue
+    const parent = item.parentElement
+    if (!parent) continue
+    counts.set(parent, (counts.get(parent) ?? 0) + 1)
+  }
+
+  let best: Element | null = null
+  let bestCount = 0
+  for (const [parent, count] of counts) {
+    if (count > bestCount) {
+      best = parent
+      bestCount = count
+    }
+  }
+
+  // Two entries is the floor for "this is a menu" - it keeps us from latching
+  // onto a single stray element that happens to match.
+  return bestCount >= 2 ? best : null
+}
+
+/** YouTube keeps closed menus in the DOM, so presence is not enough. */
 function isVisible(element: Element): boolean {
-  const rect = element.getBoundingClientRect()
-  if (rect.width === 0 || rect.height === 0) return false
+  if (element.getClientRects().length === 0) return false
   return element.closest('[aria-hidden="true"]') === null
 }
 

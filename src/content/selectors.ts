@@ -36,22 +36,25 @@ export const SELECTORS = {
     'ytd-rich-section-renderer',
   ],
 
-  /** The open three dot dropdown. */
-  menuPopup: [
-    'ytd-menu-popup-renderer',
-    'tp-yt-iron-dropdown ytd-menu-popup-renderer',
-  ],
-
-  /** The list inside that dropdown that holds the entries. */
-  menuList: [
-    'tp-yt-paper-listbox#items',
-    '#items',
-  ],
-
-  /** A single existing entry, cloned for spacing and icon geometry. */
+  /**
+   * One entry inside an open three dot menu.
+   *
+   * These do more work than they look like they do: the open menu is located
+   * by finding VISIBLE elements matching this list and taking whichever parent
+   * holds the most of them. That is deliberate. Naming the menu's own container
+   * turned out to be unreliable - YouTube runs at least two different menu
+   * implementations side by side (the old `ytd-menu-popup-renderer` on search
+   * results, the newer view-model based one on the homepage and channel pages),
+   * and matching on the wrapper meant the entry appeared on some pages only.
+   * The entries themselves are the one thing every variant has.
+   *
+   * If the entry stops appearing everywhere at once, this is the list to add to.
+   */
   menuItem: [
     'ytd-menu-service-item-renderer',
     'ytd-menu-navigation-item-renderer',
+    'yt-list-item-view-model',
+    'tp-yt-paper-item',
   ],
 
   /** Anything that represents one video tile anywhere on the site. */
