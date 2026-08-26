@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # --legacy-peer-deps for the same reason as locally: npm 10 crashes while
+      # resolving Vitest's optional peer dependencies.
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # No .env in CI, and that is fine: the build falls back to the wildcard
+      # Supabase host permission. This job proves the code compiles, not that a
+      # particular project is reachable.
+      - name: Build
+        run: npx vite build
+
+      - name: Check the bundled SQL is up to date
+        run: |
+          npm run sql:bundle
+          git diff --exit-code supabase/schema.sql \
+            || (echo "supabase/schema.sql is stale. Run 'npm run sql:bundle' and commit it." && exit 1)

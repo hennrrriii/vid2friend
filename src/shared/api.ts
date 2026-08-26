@@ -262,16 +262,27 @@ export async function createShares(
                 duration_seconds: meta.durationSeconds,
                 note: note && note.trim() ? note.trim().slice(0, 140) : null,
               })
-              .select('id,status,slot_position')
+              .select('id')
               .single(),
           ),
-        ) as Pick<Share, 'id' | 'status' | 'slot_position'>
+        ) as Pick<Share, 'id'>
 
-        // The insert trigger has already run recalculate_slots, so the row we
-        // get back knows whether it landed on the shelf or in the queue.
+        // Deliberately a second read. RETURNING gives the row as it looked
+        // after the BEFORE triggers, and recalculate_slots runs in an AFTER
+        // trigger - so the freshly inserted row would always claim to be
+        // queued, even when it went straight onto the shelf.
+        const placed = await withTimeout(
+          supabase
+            .from('shares')
+            .select('status,slot_position')
+            .eq('id', inserted.id)
+            .maybeSingle(),
+        )
+        const row = placed.data as Pick<Share, 'status' | 'slot_position'> | null
+
         const position =
-          inserted.status === 'active' && inserted.slot_position !== null
-            ? inserted.slot_position + 1
+          row?.status === 'active' && row.slot_position !== null
+            ? row.slot_position + 1
             : await queueDepth(recipientId, myProfileId)
 
         return { recipientId, ok: true, queuePosition: position }

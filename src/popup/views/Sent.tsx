@@ -89,14 +89,15 @@ function FriendQueue({ group, app }: { group: Group; app: Vid2friend }) {
     setOrder(next) // optimistic, so the row does not snap back while we save
     setDragging(null)
 
-    const ok = await app.run(() =>
+    await app.run(() =>
       reorderQueue(
         group.recipientId,
         next.map((entry) => entry.share.id),
       ),
     )
-    if (!ok) setOrder(null)
-    else setOrder(null) // reload has the authoritative order now
+    // Drop the optimistic copy either way: on success the reload has the
+    // authoritative order, on failure the server order is the truth.
+    setOrder(null)
   }
 
   return (

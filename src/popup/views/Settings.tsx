@@ -20,10 +20,20 @@ export function Settings({ app }: { app: Vid2friend }) {
   const [name, setName] = useState(profile?.username ?? '')
   const [code, setCode] = useState<string | null>(null)
   const [codeVisible, setCodeVisible] = useState(false)
+  const [slots, setSlots] = useState(profile?.slot_count ?? 6)
 
   useEffect(() => {
     setName(profile?.username ?? '')
   }, [profile?.username])
+
+  useEffect(() => {
+    setSlots(profile?.slot_count ?? 6)
+  }, [profile?.slot_count])
+
+  const commitSlots = () => {
+    if (!profile || slots === profile.slot_count) return
+    void app.run(() => updateProfile({ slot_count: slots }))
+  }
 
   useEffect(() => {
     if (!codeVisible || code) return
@@ -51,15 +61,17 @@ export function Settings({ app }: { app: Vid2friend }) {
       </label>
 
       <label className="field">
-        <span>Videos on your homepage: {profile.slot_count}</span>
+        <span>Videos on your homepage: {slots}</span>
+        {/* Dragging a range input fires onChange on every pixel. The value is
+            kept locally while dragging and written once the user lets go. */}
         <input
           type="range"
           min={3}
           max={8}
-          value={profile.slot_count}
-          onChange={(event) =>
-            void app.run(() => updateProfile({ slot_count: Number(event.target.value) }))
-          }
+          value={slots}
+          onChange={(event) => setSlots(Number(event.target.value))}
+          onPointerUp={() => commitSlots()}
+          onKeyUp={() => commitSlots()}
         />
         <p className="hint">
           How many recommendations sit above your YouTube feed. The rest wait in the queue.

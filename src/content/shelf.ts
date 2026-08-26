@@ -20,7 +20,20 @@ const MIN_CARD_WIDTH = 320
 
 export function initShelf(): void {
   onStateChange(render)
+  // Registered exactly once. The shelf itself is rebuilt whenever its contents
+  // change, so attaching this inside buildShelf would pile up listeners on
+  // window for the lifetime of the tab.
+  window.addEventListener('resize', handleResize, { passive: true })
   render(getState())
+}
+
+function handleResize(): void {
+  const shelf = document.querySelector<HTMLElement>(`[data-v2f~="${SHELF_KEY}"]`)
+  if (!shelf) return
+  updateColumns(shelf)
+  const viewport = shelf.querySelector<HTMLElement>('.v2f-shelf__viewport')
+  const track = shelf.querySelector<HTMLElement>('.v2f-shelf__track')
+  if (viewport && track) updateArrows(viewport, track)
 }
 
 /** Called on every navigation and on every state change. Cheap and idempotent. */
@@ -113,10 +126,6 @@ function buildShelf(state: CachedState): HTMLElement {
   shelf.append(viewport)
 
   track.addEventListener('scroll', () => updateArrows(viewport, track), { passive: true })
-  window.addEventListener('resize', () => {
-    updateColumns(shelf)
-    updateArrows(viewport, track)
-  })
   // Wait a frame so the browser has laid the track out before measuring it.
   requestAnimationFrame(() => updateArrows(viewport, track))
 

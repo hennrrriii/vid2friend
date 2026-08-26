@@ -1,0 +1,76 @@
+name: release
+
+# Triggered by pushing a version tag:
+#   npm version patch      (bumps package.json and creates the tag)
+#   git push --follow-tags
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+      - run: npm run typecheck
+      - run: npm test
+
+      # The real Supabase project is baked in here, so the released zip has the
+      # narrow host permission the Chrome Web Store review expects. Add these two
+      # under Settings > Secrets and variables > Actions > Variables.
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: npx vite build
+
+      - name: Pack
+        run: cd dist && zip -r ../vid2friend-${{ github.ref_name }}.zip .
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: vid2friend-${{ github.ref_name }}.zip
+          generate_release_notes: true
+
+# ---------------------------------------------------------------------------
+# Optional: upload straight to the Chrome Web Store.
+#
+# Only worth setting up once you publish regularly. You need an OAuth client
+# from the Google Cloud console with the Chrome Web Store API enabled, plus a
+# refresh token, stored as repository secrets. The full walkthrough is in the
+# README under "Publishing to the Chrome Web Store".
+#
+#      - name: Upload to the Chrome Web Store
+#        env:
+#          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+#          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+#          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+#          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+#        run: |
+#          ACCESS_TOKEN=$(curl -s -X POST \
+#            -d "client_id=$CLIENT_ID&client_secret=$CLIENT_SECRET&refresh_token=$REFRESH_TOKEN&grant_type=refresh_token" \
+#            https://oauth2.googleapis.com/token | jq -r .access_token)
+#          curl -s -X PUT \
+#            -H "Authorization: Bearer $ACCESS_TOKEN" \
+#            -H "x-goog-api-version: 2" \
+#            -T vid2friend-${{ github.ref_name }}.zip \
+#            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$EXTENSION_ID"
+#          # Then publish it (drop this step to keep it as a draft):
+#          curl -s -X POST \
+#            -H "Authorization: Bearer $ACCESS_TOKEN" \
+#            -H "x-goog-api-version: 2" \
+#            -H "Content-Length: 0" \
+#            "https://www.googleapis.com/chromewebstore/v1.1/items/$EXTENSION_ID/publish"
+# ---------------------------------------------------------------------------
