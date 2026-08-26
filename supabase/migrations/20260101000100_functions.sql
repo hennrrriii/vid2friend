@@ -87,7 +87,11 @@ declare
   ];
   idx int;
 begin
-  idx := 1 + (('x' || substr(md5(p_id::text), 1, 8))::bit(32)::bigint % array_length(palette, 1));
+  -- get_byte on the raw md5 digest, not a bit(32) cast of the hex string: that
+  -- cast is signed, so it happily produces a negative modulo, which indexes an
+  -- array out of bounds, returns NULL, and then trips the NOT NULL constraint
+  -- on avatar_color. get_byte is 0..255 and always non-negative.
+  idx := 1 + (get_byte(decode(md5(p_id::text), 'hex'), 0) % array_length(palette, 1));
   return palette[idx];
 end;
 $fn$;

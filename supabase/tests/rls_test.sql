@@ -13,6 +13,11 @@
 --
 -- Success looks like: "RLS TEST SUITE PASSED" in the notices, and no error.
 -- A failure raises immediately and names the assertion that broke.
+--
+-- Note on the SET statements below: they are deliberately at the top level and
+-- not wrapped in a helper function. PostgreSQL restores GUC values, including
+-- `role`, when a function exits, so a `become(user)` helper would have no
+-- effect at all by the time the next statement runs.
 -- ===========================================================================
 
 begin;
@@ -35,16 +40,6 @@ insert into public.profiles (id, auth_uid, username) values
 insert into public.friendships (requester_id, addressee_id, status, responded_at)
 values ('bbbbbbbb-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-000000000003', 'accepted', now());
 
--- --- helper ---------------------------------------------------------------
-create or replace function pg_temp.become(p_uid uuid) returns void
-language plpgsql as $$
-begin
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', p_uid::text, 'role', 'authenticated')::text, true);
-  execute 'set local role authenticated';
-end;
-$$;
-
 create or replace function pg_temp.check(p_label text, p_ok boolean) returns void
 language plpgsql as $$
 begin
@@ -58,7 +53,9 @@ $$;
 -- =========================================================================
 -- Alice's point of view
 -- =========================================================================
-select pg_temp.become('11111111-1111-1111-1111-111111111111');
+select set_config('request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+set local role authenticated;
 
 select pg_temp.check(
   'alice sees exactly one profile: her own',
@@ -109,7 +106,9 @@ $$;
 -- Bob's point of view (friends with Carol)
 -- =========================================================================
 reset role;
-select pg_temp.become('22222222-2222-2222-2222-222222222222');
+select set_config('request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+set local role authenticated;
 
 select pg_temp.check(
   'bob sees himself and carol',
@@ -154,7 +153,9 @@ $$;
 -- Carol's point of view (the recipient)
 -- =========================================================================
 reset role;
-select pg_temp.become('33333333-3333-3333-3333-333333333333');
+select set_config('request.jwt.claims',
+  '{"sub":"33333333-3333-3333-3333-333333333333","role":"authenticated"}', true);
+set local role authenticated;
 
 select pg_temp.check(
   'carol sees the share addressed to her',
@@ -179,7 +180,9 @@ $$;
 -- Alice again: she must not see any of that
 -- =========================================================================
 reset role;
-select pg_temp.become('11111111-1111-1111-1111-111111111111');
+select set_config('request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+set local role authenticated;
 
 select pg_temp.check(
   'alice cannot see shares between bob and carol',
