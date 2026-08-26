@@ -1,33 +1,47 @@
 /**
  * "Share with friends" as an extra entry in the three dot menu of a video tile.
  *
- * The hard part is not inserting the entry, it is knowing WHICH video the open
- * menu belongs to. YouTube reuses one `ytd-menu-popup-renderer` for every menu
- * on the page and simply re-populates it, so by the time the menu is open there
- * is no link left from the popup back to the tile.
+ * Two problems, solved independently:
  *
- * The reliable trick: remember the tile on `pointerdown`, in the capture phase,
- * before YouTube does anything. Whatever was last clicked is what the menu
- * belongs to.
+ *   1. WHICH video does the open menu belong to? YouTube reuses one
+ *      `ytd-menu-popup-renderer` for every menu on the page and simply
+ *      re-populates it, so once the menu is open there is no link left back to
+ *      the tile. Fixed by remembering the tile on `pointerdown`, in the capture
+ *      phase, via `event.composedPath()` rather than `closest()` - the latter
+ *      does not cross shadow roots, and the newer `yt-lockup-view-model` tiles
+ *      (homepage, channel pages) use real shadow DOM.
  *
- * Two things this used to get wrong, both worth knowing before changing it:
- *
- *   1. It only recorded clicks that passed through a `ytd-menu-renderer`.
- *      Search results still use that component, but the homepage and channel
- *      pages have moved to `yt-lockup-view-model`, where the overflow button is
- *      not wrapped in one. Result: the entry appeared only after a search. Now
- *      every pointerdown records its tile, or clears it when there is none.
- *
- *   2. `Element.closest()` does not cross shadow roots, and parts of YouTube
- *      are inside them. `event.composedPath()` does, so we walk that instead.
+ *   2. WHEN does the popup actually appear in a way we can detect? The
+ *      page-wide MutationObserver in dom.ts only watches childList changes.
+ *      Search results create the popup fresh each time, which is a childList
+ *      change and got picked up. The homepage and channel pages instead reuse
+ *      one hidden popup and reveal it by toggling an attribute - no childList
+ *      change at all, so the entry silently never appeared there. Fixed by
+ *      scheduling a handful of direct rechecks after every tile click,
+ *      independent of what kind of mutation opened the menu.
  */
 import { claim, el, parseDuration, pickQuiet, textOf, videoIdFromUrl } from './dom'
+import { logoMarkSvg } from '@/shared/brand'
 import { SELECTORS } from './selectors'
 import { openShareModal } from './share-modal'
 import { log } from '@/shared/log'
 import type { VideoMeta } from '@/shared/types'
 
 const ITEM_KEY = 'menu-item'
+
+/**
+ * How long after a click on a tile to keep re-checking for an opened menu.
+ *
+ * The page-wide MutationObserver in dom.ts only watches childList changes, and
+ * on the homepage and channel pages YouTube reuses one hidden popup element and
+ * reveals it by toggling an attribute rather than inserting anything - which
+ * produces no childList mutation at all. Search results still create the popup
+ * fresh each time, which is why the entry used to appear there but nowhere
+ * else. These retries are the fix: independent of what kind of mutation
+ * actually opened the menu, several short delays after every relevant click
+ * are enough to catch the popup once it becomes visible.
+ */
+const RECHECK_DELAYS_MS = [0, 50, 120, 250, 450]
 
 let lastTile: Element | null = null
 
@@ -39,6 +53,11 @@ export function initMenuItem(): void {
     (event) => {
       try {
         lastTile = tileFromEvent(event)
+        if (lastTile) {
+          for (const delay of RECHECK_DELAYS_MS) {
+            window.setTimeout(injectMenuItem, delay)
+          }
+        }
       } catch (error) {
         lastTile = null
         log.debug('tile tracking failed', error)
@@ -115,9 +134,9 @@ function isVisible(element: Element): boolean {
 
 function buildItem(meta: VideoMeta): HTMLElement {
   const icon = el('span', { class: 'v2f-menu-item__icon' })
-  icon.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-  </svg>`
+  // The brand mark, not a generic icon - so the entry reads as "this is a
+  // vid2friend feature" at a glance among YouTube's own menu items.
+  icon.innerHTML = logoMarkSvg(20)
 
   const item = el(
     'div',

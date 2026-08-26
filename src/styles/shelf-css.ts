@@ -17,6 +17,15 @@ import { BRAND } from '@/shared/brand'
 
 export const SHELF_CSS = `
 .v2f-shelf {
+  /* YouTube's homepage #contents is a CSS Grid, not a plain block flow. Without
+     this, the shelf is inserted as a single grid CELL and YouTube's next real
+     tile renders right beside it in the same row, which looks like the two are
+     related. Spanning every column makes the shelf its own full-width row,
+     regardless of how many columns the grid currently has. Harmless when the
+     parent is not a grid at all (the property is simply ignored). */
+  grid-column: 1 / -1;
+  width: 100%;
+
   --v2f-accent: ${BRAND.accent};
   --v2f-primary: ${BRAND.primary};
   --v2f-cols: 4;
