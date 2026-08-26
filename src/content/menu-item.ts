@@ -114,12 +114,16 @@ export function injectMenuItem(): void {
     // previous one would share the wrong video. Stamp it and replace it when
     // the video changes.
     const existing = list.querySelector(`[data-v2f~="${ITEM_KEY}"]`)
-    if (existing) {
-      if (existing.getAttribute('data-v2f-video') === meta.videoId) return
-      existing.remove()
+    if (existing && existing.getAttribute('data-v2f-video') === meta.videoId) {
+      // Already ours. Still re-run the resize, because YouTube reapplies its
+      // own max-height while the menu settles.
+      expandMenu(list)
+      return
     }
+    existing?.remove()
 
     list.append(buildItem(meta))
+    expandMenu(list)
   } catch (error) {
     log.error('menu item injection failed', error)
   }
@@ -169,6 +173,77 @@ function openMenuList(): Element | null {
 function isVisible(element: Element): boolean {
   if (element.getClientRects().length === 0) return false
   return element.closest('[aria-hidden="true"]') === null
+}
+
+/**
+ * Makes room for our extra entry.
+ *
+ * YouTube sizes its menus to their own content: the dropdown gets an inline
+ * max-height and an internal scroll container. Adding a seventh entry to a menu
+ * built for six therefore produces a scrollbar rather than a taller menu, and
+ * ours is the entry at the bottom that you then have to scroll to.
+ *
+ * So: lift the height caps on the way up, then, if the menu now hangs off the
+ * bottom of the window, move it up so it grows in that direction instead. If it
+ * is genuinely taller than the viewport, put a scroll container back - a menu
+ * you cannot see the top of would be worse than one that scrolls.
+ *
+ * Everything here is defensive. A menu we fail to resize is a cosmetic problem;
+ * a thrown exception inside YouTube's event handling is not.
+ */
+function expandMenu(list: Element): void {
+  try {
+    const chain: HTMLElement[] = []
+    let node: Element | null = list
+    for (let depth = 0; node instanceof HTMLElement && depth < 8; depth += 1) {
+      chain.push(node)
+      if (node === document.body) break
+      node = node.parentElement
+    }
+
+    for (const element of chain) {
+      const style = getComputedStyle(element)
+      if (style.maxHeight !== 'none') element.style.maxHeight = 'none'
+      if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+        element.style.overflowY = 'visible'
+      }
+    }
+
+    // The dropdown positions itself with an inline `top`. That is the element
+    // to move when the taller menu no longer fits below the button.
+    const positioned = chain.find((element) => {
+      const style = getComputedStyle(element)
+      return style.position === 'fixed' || style.position === 'absolute'
+    })
+    if (!positioned) return
+
+    // After a frame, so the browser has laid out the taller menu.
+    requestAnimationFrame(() => {
+      try {
+        const margin = 8
+        const rect = positioned.getBoundingClientRect()
+        const available = window.innerHeight - margin * 2
+
+        if (rect.height > available) {
+          // Taller than the window even at full height: scroll after all.
+          positioned.style.maxHeight = `${available}px`
+          positioned.style.overflowY = 'auto'
+          positioned.style.top = `${margin}px`
+          return
+        }
+
+        if (rect.bottom > window.innerHeight - margin) {
+          const currentTop = Number.parseFloat(positioned.style.top || String(rect.top)) || rect.top
+          const shift = rect.bottom - (window.innerHeight - margin)
+          positioned.style.top = `${Math.max(margin, currentTop - shift)}px`
+        }
+      } catch (error) {
+        log.debug('menu reposition failed', error)
+      }
+    })
+  } catch (error) {
+    log.debug('menu expand failed', error)
+  }
 }
 
 function buildItem(meta: VideoMeta): HTMLElement {

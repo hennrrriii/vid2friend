@@ -83,10 +83,16 @@ export async function clearAll(): Promise<void> {
  */
 export interface LocalPrefs {
   onboarded: boolean
+  /**
+   * Whether the empty slots on the shelf are collapsed. Per browser, not per
+   * account: it is a viewing preference, not something a friend should inherit
+   * from you. Default false, so a new user sees how many slots they have.
+   */
+  hideEmptySlots: boolean
 }
 
 const PREFS_KEY = 'v2f-prefs'
-const DEFAULT_PREFS: LocalPrefs = { onboarded: false }
+const DEFAULT_PREFS: LocalPrefs = { onboarded: false, hideEmptySlots: false }
 
 export async function readPrefs(): Promise<LocalPrefs> {
   try {

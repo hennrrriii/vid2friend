@@ -74,6 +74,51 @@ html[dark] .v2f-shelf {
 
 .v2f-shelf__spacer { flex: 1 1 auto; }
 
+.v2f-shelf__count {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--v2f-surface);
+  color: var(--v2f-text-dim);
+  font-size: 1.2rem;
+  font-weight: 500;
+  line-height: 1.8rem;
+}
+
+/* The one control in the shelf a user has to discover on their own, so it is
+   a labelled pill in the accent colour rather than a bare icon. */
+.v2f-shelf__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  margin-right: 8px;
+  border: 1px solid ${BRAND.accent};
+  border-radius: 16px;
+  background: ${BRAND.accentSoft};
+  color: ${BRAND.accent};
+  font-family: inherit;
+  font-size: 1.3rem;
+  font-weight: 500;
+  line-height: 1.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease;
+}
+
+.v2f-shelf__toggle:hover { background: rgba(114, 163, 242, 0.28); }
+.v2f-shelf__toggle:focus-visible { outline: 2px solid ${BRAND.accent}; outline-offset: 2px; }
+
+/* Collapsed reads as "off": same shape, no fill, so the state is obvious
+   without having to read the label. */
+.v2f-shelf__toggle.is-off {
+  border-color: var(--v2f-text-dim);
+  background: transparent;
+  color: var(--v2f-text-dim);
+}
+
+.v2f-shelf__toggle.is-off:hover { background: var(--v2f-surface); }
+
 .v2f-shelf__link {
   padding: 6px 12px;
   border: 0;
@@ -236,6 +281,30 @@ html[dark] .v2f-shelf {
   overflow-wrap: anywhere;
 }
 
+/* --- a free slot ---------------------------------------------------------- */
+
+.v2f-card--empty { pointer-events: none; }
+
+.v2f-card__thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 2px dashed var(--v2f-surface);
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+html[dark] .v2f-card__thumb--empty { border-color: rgba(255, 255, 255, 0.14); }
+html:not([dark]) .v2f-card__thumb--empty { border-color: rgba(0, 0, 0, 0.12); }
+
+.v2f-card__empty-mark { display: flex; line-height: 0; opacity: 0.28; }
+
+.v2f-card__empty-text {
+  font-size: 1.4rem;
+  line-height: 2.2rem;
+  color: var(--v2f-text-dim);
+}
+
 /* Dismiss, revealed on hover like YouTube's own overlay controls. */
 .v2f-card__dismiss {
   position: absolute;
@@ -320,17 +389,21 @@ html[dark] .v2f-menu-item { color: var(--yt-spec-text-primary, #f1f1f1); }
 
 /* --- the watch page button ------------------------------------------------ */
 
+/* Filled brand blue, unlike YouTube's own grey pills. This button competes
+   with Like, Share and Save, which all look identical to each other; matching
+   them would have made it invisible. The height and radius still match so it
+   sits in the row rather than on top of it. */
 .v2f-watch-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 36px;
   padding: 0 16px;
   margin-right: 8px;
   border: 0;
   border-radius: 18px;
-  background: var(--yt-spec-badge-chip-background, rgba(0, 0, 0, 0.05));
-  color: var(--yt-spec-text-primary, #0f0f0f);
+  background: ${BRAND.primary};
+  color: #ffffff;
   font-family: 'Roboto', 'Arial', sans-serif;
   font-size: 1.4rem;
   font-weight: 500;
@@ -339,13 +412,18 @@ html[dark] .v2f-menu-item { color: var(--yt-spec-text-primary, #f1f1f1); }
   white-space: nowrap;
 }
 
-html[dark] .v2f-watch-button {
-  background: var(--yt-spec-badge-chip-background, rgba(255, 255, 255, 0.1));
-  color: var(--yt-spec-text-primary, #f1f1f1);
+.v2f-watch-button__icon {
+  display: flex;
+  line-height: 0;
+  /* The mark carries its own blue background; on the blue pill it needs a
+     light plate to stay legible. */
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 2px;
 }
 
-.v2f-watch-button:hover { filter: brightness(0.94); }
-html[dark] .v2f-watch-button:hover { filter: brightness(1.25); }
+.v2f-watch-button:hover { background: ${BRAND.primaryDark}; }
+.v2f-watch-button:active { background: #17408a; }
 .v2f-watch-button:focus-visible { outline: 2px solid ${BRAND.accent}; outline-offset: 2px; }
 
 /* Narrow windows: icon only, same as YouTube collapses its own buttons. */
