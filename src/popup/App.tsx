@@ -1,6 +1,12 @@
 import { useState } from 'react'
-import { isConfigured } from '@/shared/env'
 import { logoMarkSvg } from '@/shared/brand'
+import { ErrorBanner, Spinner } from './components'
+import { useVid2friend } from './useVid2friend'
+import { Onboarding } from './views/Onboarding'
+import { Inbox } from './views/Inbox'
+import { Sent } from './views/Sent'
+import { Friends } from './views/Friends'
+import { Settings } from './views/Settings'
 
 type TabId = 'inbox' | 'sent' | 'friends' | 'settings'
 
@@ -12,46 +18,66 @@ const TABS: { id: TabId; label: string }[] = [
 ]
 
 export function App() {
+  const app = useVid2friend()
   const [tab, setTab] = useState<TabId>('inbox')
+
+  const pending = app.data.friends.filter(
+    (f) => f.status === 'pending' && f.direction === 'incoming',
+  ).length
 
   return (
     <div className="v2f-popup">
       <header className="v2f-header">
         <span className="v2f-logo" dangerouslySetInnerHTML={{ __html: logoMarkSvg(22) }} />
         <h1>vid2friend</h1>
+        {app.data.profile && <span className="v2f-me">{app.data.profile.username}</span>}
       </header>
 
-      {!isConfigured && (
-        <div className="v2f-notice">
-          <strong>Setup incomplete.</strong>
-          <span>
-            Add your Supabase URL and anon key to <code>.env</code>, then rebuild. See README
-            section 2.
-          </span>
+      {!app.configured ? (
+        <div className="v2f-body">
+          <div className="banner banner--info">
+            <strong>Setup incomplete.</strong>
+            <span>
+              Add your Supabase URL and anon key to <code>.env</code>, then run{' '}
+              <code>npm run build</code> and reload the extension. README section 2 walks through
+              it.
+            </span>
+          </div>
         </div>
+      ) : app.loading ? (
+        <div className="v2f-body">
+          <Spinner />
+        </div>
+      ) : !app.data.profile ? (
+        <div className="v2f-body">
+          <Onboarding onDone={app.reload} error={app.error} setError={app.setError} />
+        </div>
+      ) : (
+        <>
+          <nav className="v2f-tabs" role="tablist">
+            {TABS.map((entry) => (
+              <button
+                key={entry.id}
+                role="tab"
+                aria-selected={tab === entry.id}
+                className={tab === entry.id ? 'is-active' : ''}
+                onClick={() => setTab(entry.id)}
+              >
+                {entry.label}
+                {entry.id === 'friends' && pending > 0 && <span className="dot">{pending}</span>}
+              </button>
+            ))}
+          </nav>
+
+          <main className="v2f-body">
+            <ErrorBanner message={app.error} onDismiss={() => app.setError('')} />
+            {tab === 'inbox' && <Inbox app={app} />}
+            {tab === 'sent' && <Sent app={app} />}
+            {tab === 'friends' && <Friends app={app} />}
+            {tab === 'settings' && <Settings app={app} />}
+          </main>
+        </>
       )}
-
-      <nav className="v2f-tabs" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            className={tab === t.id ? 'is-active' : ''}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
-
-      <main className="v2f-body">
-        <p className="v2f-placeholder">
-          Nothing here yet. This screen gets filled in as the milestones land.
-        </p>
-      </main>
-
-      <footer className="v2f-footer">v{__APP_VERSION__}</footer>
     </div>
   )
 }

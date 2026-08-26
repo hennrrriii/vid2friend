@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "icons": "node scripts/generate-icons.mjs",
-    "zip": "node scripts/zip.mjs"
+    "zip": "node scripts/zip.mjs",
+    "sql:bundle": "node scripts/bundle-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
