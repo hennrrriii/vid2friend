@@ -28,10 +28,13 @@ Stored locally in your browser (`chrome.storage.local`), never sent anywhere:
 
 ## What is NOT collected
 
-- **No email address, no password, no name, no phone number.** Sign in is
-  anonymous. We never ask for and never receive an identity.
-- **No browsing history.** The extension only ever records videos you actively
-  choose to share. It does not observe, log or transmit what you watch.
+- **No email address, no password, no phone number.** Sign in is anonymous.
+  The only thing you are ever asked for is a display name, and you choose what
+  that is; it does not have to be your real one.
+- **No general browsing history.** The extension records two things only:
+  videos you actively choose to share, and whether you have watched a video a
+  friend sent you. Everything else you watch on YouTube is never observed,
+  logged or transmitted, and no other website is touched at all.
 - **No analytics, no tracking pixels, no advertising, no third party
   trackers.** There is no telemetry of any kind.
 - **No payment data.** The extension is free.
