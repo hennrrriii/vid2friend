@@ -5,25 +5,38 @@
  * youtube.com works for the recipient either way - with the extension they get
  * this prompt, without it they just land on YouTube and nothing looks broken.
  *
- * `#v2f=CODE` is accepted as well, as a hedge against YouTube one day stripping
- * unknown query parameters.
+ * The code itself is NOT read here. It is captured at document_start by
+ * invite-capture.ts and left in chrome.storage, because by the time this file
+ * runs the parameter may already be gone from the address bar. This module only
+ * picks it up, asks, and clears it.
+ *
+ * Leaving it in storage until the user answers has a useful side effect: if
+ * they follow an invite link before setting up their own profile, the request
+ * is not lost. The prompt comes back on the next YouTube page load, once
+ * vid2friend actually has an account to send it from.
  */
 import { send } from '@/shared/messages'
 import { BRAND, logoMarkSvg } from '@/shared/brand'
 import { log } from '@/shared/log'
 import { showToast } from './toast'
 
+const PENDING_KEY = 'v2f-pending-invite'
 const CODE_PATTERN = /^[A-HJ-NP-Z2-9]{8}$/
+/** A code nobody acted on within this window is stale. */
+const MAX_AGE_MS = 30 * 60 * 1000
+
+interface PendingInvite {
+  code: string
+  at: number
+}
 
 export async function checkConnectLink(): Promise<void> {
   try {
-    const code = readCode()
+    const code = await pendingCode()
     if (!code) return
-    log.info('invite code found:', code)
 
-    // Take the parameter out of the URL first, so a refresh does not ask again
-    // and the code does not stay in the address bar.
-    stripCode()
+    log.info('invite code pending:', code)
+    stripCodeFromUrl()
 
     const profile = await send({ type: 'friend:lookupCode', code }).catch(() => null)
 
@@ -34,15 +47,21 @@ export async function checkConnectLink(): Promise<void> {
       profile?.avatar_color ?? BRAND.primary,
       profile?.username ?? null,
     )
-    if (!confirmed) return
+
+    if (!confirmed) {
+      await clearPending()
+      return
+    }
 
     await send({ type: 'friend:requestByCode', code })
+    await clearPending()
+
     showToast({
-      message: profile
-        ? `Friend request sent to ${profile.username}`
-        : 'Friend request sent',
+      message: profile ? `Friend request sent to ${profile.username}` : 'Friend request sent',
     })
   } catch (error) {
+    // The code stays in storage on failure, so setting up a profile and
+    // reloading YouTube is enough to get the prompt back.
     showToast({
       message: error instanceof Error ? error.message : 'Could not send the friend request.',
     })
@@ -51,44 +70,41 @@ export async function checkConnectLink(): Promise<void> {
 }
 
 /**
- * Looks for the code in three places, in this order.
- *
- * The third one is the important one. The content script runs at
- * document_idle, and YouTube's app rewrites the address bar during startup, so
- * by the time we look, `?v2f=` can already be gone from `location`. The
- * navigation timing entry still remembers the URL the document was actually
- * loaded with, which survives any number of history.replaceState calls.
+ * The code invite-capture.ts stashed, or, as a fallback, one still in the URL.
+ * The fallback matters for a soft navigation, where document_start never fires.
  */
-function readCode(): string | null {
-  const urls: string[] = [location.href]
-
+async function pendingCode(): Promise<string | null> {
   try {
-    const nav = performance.getEntriesByType('navigation')[0] as
-      | PerformanceNavigationTiming
+    const stored = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY] as
+      | PendingInvite
       | undefined
-    if (nav?.name) urls.push(nav.name)
-  } catch {
-    /* navigation timing is not available; the two above will have to do */
-  }
 
-  for (const href of urls) {
-    try {
-      const url = new URL(href, location.origin)
-      const fromQuery = url.searchParams.get('v2f')
-      const fromHash = new URLSearchParams(url.hash.replace(/^#/, '')).get('v2f')
-      const candidate = (fromQuery ?? fromHash ?? '').trim().toUpperCase()
-      if (CODE_PATTERN.test(candidate)) return candidate
-    } catch {
-      /* not a parseable URL, try the next candidate */
+    if (stored && CODE_PATTERN.test(stored.code)) {
+      if (Date.now() - stored.at < MAX_AGE_MS) return stored.code
+      await clearPending()
     }
+  } catch (error) {
+    log.debug('could not read the pending invite', error)
   }
 
-  return null
+  const fromQuery = new URLSearchParams(location.search).get('v2f')
+  const fromHash = new URLSearchParams(location.hash.replace(/^#/, '')).get('v2f')
+  const candidate = (fromQuery ?? fromHash ?? '').trim().toUpperCase()
+  return CODE_PATTERN.test(candidate) ? candidate : null
 }
 
-function stripCode(): void {
+async function clearPending(): Promise<void> {
+  try {
+    await chrome.storage.local.remove(PENDING_KEY)
+  } catch (error) {
+    log.debug('could not clear the pending invite', error)
+  }
+}
+
+function stripCodeFromUrl(): void {
   try {
     const url = new URL(location.href)
+    if (!url.searchParams.has('v2f') && !url.hash.includes('v2f=')) return
     url.searchParams.delete('v2f')
     if (url.hash.includes('v2f=')) url.hash = ''
     history.replaceState(null, '', url.toString())
@@ -113,7 +129,7 @@ function confirmDialog(
         :host { all: initial; }
         * { box-sizing: border-box; font-family: 'Roboto', system-ui, sans-serif; }
         .overlay {
-          position: fixed; inset: 0; z-index: 9999;
+          position: fixed; inset: 0; z-index: 2147483000;
           display: flex; align-items: center; justify-content: center;
           background: rgba(0, 0, 0, 0.6);
         }
@@ -139,7 +155,7 @@ function confirmDialog(
         }
         .no { background: #23262e; color: #e9ecf1; }
         .yes { background: ${BRAND.primary}; color: #fff; }
-        .yes:hover { background: #1b4fa5; }
+        .yes:hover { background: ${BRAND.primaryDark}; }
         :focus-visible { outline: 2px solid ${BRAND.accent}; outline-offset: 2px; }
       </style>
       <div class="overlay">

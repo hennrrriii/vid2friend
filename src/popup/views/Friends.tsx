@@ -25,7 +25,10 @@ export function Friends({ app }: { app: Vid2friend }) {
   )
   const accepted = app.data.friends.filter((f) => f.status === 'accepted')
 
-  const inviteLink = `https://www.youtube.com/?v2f=${profile.friend_code}`
+  // The code is in the query AND the fragment on purpose. A fragment never
+  // reaches a server, so it survives anything YouTube might do with unknown
+  // query parameters, including a redirect that drops them.
+  const inviteLink = `https://www.youtube.com/?v2f=${profile.friend_code}#v2f=${profile.friend_code}`
   const inviteText =
     `Add me on vid2friend so I can send you videos: ${inviteLink}\n` +
     `Install it first from the Chrome Web Store, otherwise the link just opens YouTube.`

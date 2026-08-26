@@ -65,24 +65,40 @@ if (swEntry) {
   )
 }
 
-// --- content script --------------------------------------------------------
-const csEntry = manifest.content_scripts?.[0]?.js?.[0]
-check('manifest declares a content script', Boolean(csEntry))
+// --- content scripts -------------------------------------------------------
+const contentScripts = manifest.content_scripts ?? []
+const entries = contentScripts.flatMap((entry) => entry.js ?? [])
+check('manifest declares content scripts', entries.length > 0)
 
-if (csEntry) {
-  const cs = await loadedCode(csEntry)
-  check(
-    'the content script bundle is the content code',
-    cs.code.includes(CONTENT_MARKER),
-    `${csEntry} loads ${cs.file}, which does not contain ${CONTENT_MARKER}`,
-  )
-  check(
-    'the content script does not bundle the Supabase client',
-    !cs.code.includes('supabase'),
-    `${cs.file} pulls in Supabase. The content script must go through the ` +
-      'service worker instead, see src/shared/supabase.ts.',
-  )
+const bundles = []
+for (const entry of entries) {
+  bundles.push({ entry, ...(await loadedCode(entry)) })
 }
+
+check(
+  'one content script bundle is the main content code',
+  bundles.some((bundle) => bundle.code.includes(CONTENT_MARKER)),
+  `checked ${bundles.map((b) => b.file ?? b.entry).join(', ')}`,
+)
+
+check(
+  'no content script bundles the Supabase client',
+  bundles.every((bundle) => !bundle.code.includes('supabase')),
+  'content scripts must go through the service worker, see src/shared/supabase.ts',
+)
+
+// The invite capture script only earns its place by running early. If that
+// ever regresses to document_idle it is dead weight, and invite links break in
+// a way nothing else notices.
+const capture = contentScripts.find((entry) =>
+  (entry.js ?? []).some((file) => file.includes('invite-capture')),
+)
+check('the invite capture script is registered', Boolean(capture))
+check(
+  'the invite capture script runs at document_start',
+  capture?.run_at === 'document_start',
+  `run_at is ${capture?.run_at ?? 'unset'}`,
+)
 
 // --- permissions -----------------------------------------------------------
 const permissions = manifest.permissions ?? []

@@ -65,6 +65,14 @@ export function createManifest(env: Record<string, string>) {
         // document_idle keeps us out of YouTube's critical rendering path.
         run_at: 'document_idle',
       },
+      {
+        // Tiny, and early on purpose. An invite link's ?v2f= parameter is gone
+        // from the address bar by the time document_idle arrives, because
+        // YouTube's app rewrites the URL while it boots. See invite-capture.ts.
+        matches: ['https://www.youtube.com/*'],
+        js: ['src/content/invite-capture.ts'],
+        run_at: 'document_start',
+      },
     ],
 
     /**
