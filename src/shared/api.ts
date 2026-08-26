@@ -149,6 +149,22 @@ export async function removeFriend(profileId: string): Promise<void> {
   if (result.error) throw new Error(toUserMessage(result.error))
 }
 
+/**
+ * Answers an invite link. Accepting makes the two people friends immediately,
+ * with the code's owner recorded as the one who invited.
+ */
+export async function answerInvite(code: string, accept: boolean): Promise<Friendship> {
+  const supabase = getSupabase()
+  return unwrap(
+    await withTimeout(
+      supabase.rpc('accept_invite', {
+        p_code: code.trim().toUpperCase(),
+        p_accept: accept,
+      }),
+    ),
+  )
+}
+
 export async function findByCode(code: string): Promise<PublicProfile | null> {
   const supabase = getSupabase()
   const result = await withTimeout(

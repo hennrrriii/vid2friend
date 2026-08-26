@@ -11,6 +11,7 @@ import { isConfigured } from '@/shared/env'
 import { toUserMessage } from '@/shared/errors'
 import type { Request, Response } from '@/shared/messages'
 import {
+  answerInvite,
   createShares,
   dismissShare,
   findByCode,
@@ -108,6 +109,12 @@ async function handle(message: Request): Promise<unknown> {
       const friendship = await sendFriendRequest(message.code)
       await refreshState()
       return { status: friendship.status, username: null }
+    }
+
+    case 'friend:answerInvite': {
+      const friendship = await answerInvite(message.code, message.accept)
+      await refreshState()
+      return { status: friendship.status }
     }
 
     case 'share:create': {

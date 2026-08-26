@@ -18,6 +18,8 @@ export type Request =
   | { type: 'friends:alreadyQueued'; videoId: string; friendIds: string[] }
   | { type: 'friend:lookupCode'; code: string }
   | { type: 'friend:requestByCode'; code: string }
+  /** Answering an invite link, which is a different act from asking. */
+  | { type: 'friend:answerInvite'; code: string; accept: boolean }
   | { type: 'share:create'; recipientIds: string[]; meta: VideoMeta; note: string | null }
   | { type: 'share:dismiss'; shareId: string }
   | { type: 'share:undismiss'; shareId: string }
@@ -41,6 +43,7 @@ export interface ResponseMap {
   'friends:alreadyQueued': string[]
   'friend:lookupCode': PublicProfile | null
   'friend:requestByCode': { status: string; username: string | null }
+  'friend:answerInvite': { status: string }
   'share:create': ShareOutcome[]
   'share:dismiss': ShelfItem[]
   'share:undismiss': null

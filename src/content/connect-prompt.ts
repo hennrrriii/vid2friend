@@ -1,6 +1,12 @@
 /**
  * Handles the personal invite link: https://www.youtube.com/?v2f=ABCD2345
  *
+ * Sending the link IS the invitation. Opening it therefore ANSWERS one - accept
+ * and you are friends immediately, with the sender recorded as the person who
+ * invited. It used to work the other way round, making the recipient send a
+ * request back that the sender then had to approve, which meant whoever started
+ * the exchange got asked to confirm their own offer.
+ *
  * Why a YouTube URL and not our own website: we do not host one. A link into
  * youtube.com works for the recipient either way - with the extension they get
  * this prompt, without it they just land on YouTube and nothing looks broken.
@@ -39,25 +45,30 @@ export async function checkConnectLink(): Promise<void> {
     stripCodeFromUrl()
 
     const profile = await send({ type: 'friend:lookupCode', code }).catch(() => null)
+    const name = profile?.username ?? null
 
-    const confirmed = await confirmDialog(
-      profile
-        ? `${profile.username} wants to connect with you on vid2friend.`
-        : `Someone shared their vid2friend code with you: ${code}`,
+    const answer = await confirmDialog(
+      name
+        ? `${name} invited you to connect on vid2friend.`
+        : `Someone invited you to connect on vid2friend. Their code is ${code}.`,
       profile?.avatar_color ?? BRAND.primary,
-      profile?.username ?? null,
+      name,
     )
 
-    if (!confirmed) {
-      await clearPending()
-      return
-    }
+    // Dismissing the dialog without answering leaves the invitation pending, so
+    // it can still be answered on the next visit.
+    if (answer === 'dismiss') return
 
-    await send({ type: 'friend:requestByCode', code })
+    await send({ type: 'friend:answerInvite', code, accept: answer === 'accept' })
     await clearPending()
 
     showToast({
-      message: profile ? `Friend request sent to ${profile.username}` : 'Friend request sent',
+      message:
+        answer === 'accept'
+          ? name
+            ? `You and ${name} are now friends`
+            : 'You are now friends'
+          : 'Invitation declined',
     })
   } catch (error) {
     // The code stays in storage on failure, so setting up a profile and
@@ -113,12 +124,21 @@ function stripCodeFromUrl(): void {
   }
 }
 
-/** A small confirm dialog in its own shadow root, styled like the share modal. */
+type InviteAnswer = 'accept' | 'decline' | 'dismiss'
+
+/**
+ * The invite dialog, in its own shadow root.
+ *
+ * Three outcomes, not two. Decline is a real answer and is recorded as one;
+ * dismissing (Escape, or clicking the backdrop) is not an answer at all and
+ * leaves the invitation waiting, because closing a dialog by accident should
+ * not silently reject a friend.
+ */
 function confirmDialog(
   message: string,
   accentColor: string,
   username: string | null,
-): Promise<boolean> {
+): Promise<InviteAnswer> {
   return new Promise((resolve) => {
     const host = document.createElement('div')
     host.setAttribute('data-v2f', 'connect')
@@ -169,8 +189,8 @@ function confirmDialog(
           }
           <p>${message}</p>
           <div class="row">
-            <button class="no" type="button">Not now</button>
-            <button class="yes" type="button">Add friend</button>
+            <button class="no" type="button">Decline</button>
+            <button class="yes" type="button">Accept</button>
           </div>
         </div>
       </div>`
@@ -183,16 +203,24 @@ function confirmDialog(
 
     document.body.append(host)
 
-    const finish = (result: boolean) => {
+    const finish = (result: InviteAnswer) => {
+      document.removeEventListener('keydown', onEscape, true)
       host.remove()
       resolve(result)
     }
 
-    shadow.querySelector('.yes')?.addEventListener('click', () => finish(true))
-    shadow.querySelector('.no')?.addEventListener('click', () => finish(false))
+    function onEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      finish('dismiss')
+    }
+
+    shadow.querySelector('.yes')?.addEventListener('click', () => finish('accept'))
+    shadow.querySelector('.no')?.addEventListener('click', () => finish('decline'))
     shadow.querySelector('.overlay')?.addEventListener('mousedown', (event) => {
-      if (event.target === shadow.querySelector('.overlay')) finish(false)
+      if (event.target === shadow.querySelector('.overlay')) finish('dismiss')
     })
+    document.addEventListener('keydown', onEscape, true)
     shadow.querySelector<HTMLElement>('.yes')?.focus()
   })
 }

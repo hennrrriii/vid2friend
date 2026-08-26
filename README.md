@@ -138,6 +138,11 @@ Wenn du das Schema aus Versehen zweimal einspielst, bricht es mit
 `type "friendship_status" already exists` ab. Das ist gut so, es bedeutet, dass
 schon alles da ist.
 
+**Wenn später eine Migration dazukommt:** `schema.sql` erneut einzuspielen
+scheitert dann an genau diesem Punkt. Nimm stattdessen die einzelne neue Datei
+aus `supabase/migrations/` und spiele nur die im SQL Editor ein. Die Dateien
+sind nach Datum sortiert, die neueste ist die unterste.
+
 ### Weg B: Supabase CLI
 
 Sinnvoll, sobald du das Schema weiterentwickelst, weil dann jede Änderung als
@@ -341,9 +346,20 @@ Identität. Genau das wollen wir.
     Auf **Accept**.
 11. Beide sehen sich jetzt gegenseitig in der Freundesliste.
 
-Alternativ der persönliche Link: in Profil B **Copy invite link**, den Text in
-Profil A in die Adresszeile einfügen. Es öffnet sich YouTube und die Extension
-fragt direkt, ob du Niklas hinzufügen möchtest.
+Alternativ der persönliche Link: in Profil B auf **Copy invite link**, dann in
+Profil A **nur die URL** in die Adresszeile einfügen (der kopierte Text enthält
+zusätzlich einen Installationshinweis; nimmst du alles, macht Chrome daraus eine
+Google-Suche). Es öffnet sich YouTube, und die Extension fragt, ob du Niklas'
+Einladung annehmen möchtest. Ein Klick auf **Accept** und ihr seid sofort
+befreundet, ohne dass Niklas noch etwas bestätigen muss.
+
+Der Unterschied zum Freundescode ist Absicht: einen Code eintippen heißt "ich
+frage dich an", also muss der andere bestätigen. Einen Link verschicken heißt
+"ich lade dich ein", also antwortet der Empfänger. Sicherheitstechnisch ist
+beides gleichwertig, in beiden Fällen ist der Besitz des achtstelligen Codes die
+Berechtigung. Wenn dein Code irgendwo landet, wo er nicht hingehört, kannst du
+ihn nicht ersetzen, ohne den Account neu anzulegen; das ist eine bekannte Lücke
+und steht in der Roadmap.
 
 **8.4 Ein Video teilen**
 
