@@ -28,7 +28,9 @@ export const SHELF_CSS = `
 
   --v2f-accent: ${BRAND.accent};
   --v2f-primary: ${BRAND.primary};
-  --v2f-cols: 4;
+  /* Set from JS after measuring one of YouTube's own thumbnails. The literal
+     here is only what the very first frame uses. */
+  --v2f-card-inner: 320px;
   --v2f-gap: 16px;
   --v2f-text: var(--yt-spec-text-primary, #0f0f0f);
   --v2f-text-dim: var(--yt-spec-text-secondary, #606060);
@@ -153,12 +155,28 @@ html[dark] .v2f-shelf {
 
 .v2f-shelf__track::-webkit-scrollbar { display: none; }
 
+/* The card is one measured thumbnail wide plus its frame, so the thumbnail
+   inside lines up with the feed's rather than the card's outer edge. */
 .v2f-card {
-  flex: 0 0 calc((100% - (var(--v2f-cols) - 1) * var(--v2f-gap)) / var(--v2f-cols));
+  flex: 0 0 calc(var(--v2f-card-inner) + 18px);
   min-width: 0;
   scroll-snap-align: start;
   position: relative;
+  padding: 8px;
+  border: 1px solid ${BRAND.accent};
+  border-radius: 14px;
+  background: transparent;
+  transition: background 120ms ease;
 }
+
+html[dark] .v2f-card { border-color: rgba(114, 163, 242, 0.55); }
+html:not([dark]) .v2f-card { border-color: rgba(36, 103, 212, 0.4); }
+
+.v2f-card:hover { background: ${BRAND.accentSoft}; }
+
+/* A free slot is a frame with nothing in it, so it does not need a second one. */
+.v2f-card--empty { border-style: dashed; }
+.v2f-card--empty:hover { background: transparent; }
 
 /* Arrows, same idea as YouTube's own shelves. Hidden until they are needed. */
 .v2f-shelf__arrow {
@@ -289,13 +307,8 @@ html[dark] .v2f-shelf {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 2px dashed var(--v2f-surface);
-  box-shadow: inset 0 0 0 1px transparent;
+  background: var(--v2f-surface);
 }
-
-html[dark] .v2f-card__thumb--empty { border-color: rgba(255, 255, 255, 0.14); }
-html:not([dark]) .v2f-card__thumb--empty { border-color: rgba(0, 0, 0, 0.12); }
 
 .v2f-card__empty-mark { display: flex; line-height: 0; opacity: 0.28; }
 
@@ -308,8 +321,8 @@ html:not([dark]) .v2f-card__thumb--empty { border-color: rgba(0, 0, 0, 0.12); }
 /* Dismiss, revealed on hover like YouTube's own overlay controls. */
 .v2f-card__dismiss {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 16px;
+  right: 16px;
   width: 28px;
   height: 28px;
   border: 0;

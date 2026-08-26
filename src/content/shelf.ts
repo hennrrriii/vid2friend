@@ -7,7 +7,8 @@
  *     exactly like it always does.
  *   - touch the normal feed. We insert one node above it and nothing else.
  */
-import { alreadyInjected, claim, el, formatDuration, isVideoId, pick, thumbnailUrl } from './dom'
+import { alreadyInjected, claim, el, formatDuration, isVideoId, pick, pickQuiet, thumbnailUrl } from './dom'
+import { SELECTORS } from './selectors'
 import { getState, onStateChange, refresh } from './state'
 import { readPrefs, writePrefs } from '@/shared/storage'
 import { showToast } from './toast'
@@ -17,7 +18,12 @@ import { log } from '@/shared/log'
 import type { CachedState, ShelfItem } from '@/shared/types'
 
 const SHELF_KEY = 'shelf'
-const MIN_CARD_WIDTH = 320
+
+/** Used only when YouTube's own tiles cannot be measured. */
+const FALLBACK_COLUMNS = 3
+const CARD_GAP = 16
+/** Padding plus border the accent frame adds around a card, left and right. */
+const CARD_FRAME = 18
 
 /**
  * Whether the empty slots are collapsed. Mirrored into a module variable
@@ -44,7 +50,7 @@ export function initShelf(): void {
 function handleResize(): void {
   const shelf = document.querySelector<HTMLElement>(`[data-v2f~="${SHELF_KEY}"]`)
   if (!shelf) return
-  updateColumns(shelf)
+  applyCardWidth(shelf)
   const viewport = shelf.querySelector<HTMLElement>('.v2f-shelf__viewport')
   const track = shelf.querySelector<HTMLElement>('.v2f-shelf__track')
   if (viewport && track) updateArrows(viewport, track)
@@ -79,7 +85,7 @@ export function render(state: CachedState = getState()): void {
     if (firstRow) contents.insertBefore(shelf, firstRow)
     else contents.append(shelf)
 
-    updateColumns(shelf)
+    applyCardWidth(shelf)
   } catch (error) {
     // A broken shelf must never take the homepage with it.
     log.error('shelf render failed', error)
@@ -313,13 +319,49 @@ async function dismiss(item: ShelfItem): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Mirrors how YouTube picks its column count: as many columns as fit at roughly
- * 320px each, capped at six because that is the most slots we can ever have.
+ * Sizes our cards to YouTube's own, by measuring one instead of guessing.
+ *
+ * The previous version divided the container by a fixed 320px and hoped that
+ * matched YouTube's column count. It usually did not: YouTube's grid depends on
+ * the sidebar state, the zoom level and its own breakpoints, so our cards ended
+ * up a little smaller or larger than the feed right below them, which is
+ * exactly the kind of not-quite-right that makes an injected UI look injected.
+ *
+ * Measuring a real thumbnail is immune to all of that. The card is that width
+ * plus the accent frame, so the THUMBNAILS line up with the feed's, which is
+ * the part the eye actually compares.
  */
-function updateColumns(shelf: HTMLElement): void {
-  const width = shelf.clientWidth || document.documentElement.clientWidth
-  const columns = Math.min(6, Math.max(1, Math.floor(width / MIN_CARD_WIDTH)))
-  shelf.style.setProperty('--v2f-cols', String(columns))
+function applyCardWidth(shelf: HTMLElement): void {
+  const measured = measureYouTubeThumbnail()
+
+  if (measured) {
+    shelf.style.setProperty('--v2f-card-inner', `${Math.round(measured)}px`)
+    return
+  }
+
+  // No feed to measure yet (first paint, or YouTube changed its markup).
+  const container = shelf.clientWidth || document.documentElement.clientWidth
+  const width = (container - CARD_GAP * (FALLBACK_COLUMNS - 1)) / FALLBACK_COLUMNS - CARD_FRAME
+  shelf.style.setProperty('--v2f-card-inner', `${Math.max(160, Math.floor(width))}px`)
+}
+
+/** Width of the first of YouTube's own thumbnails in the feed, in pixels. */
+function measureYouTubeThumbnail(): number | null {
+  const contents = pickQuiet('homeContents')
+  if (!contents) return null
+
+  const tiles = contents.querySelectorAll(SELECTORS.videoTile.join(','))
+  for (const tile of tiles) {
+    // Never measure ourselves.
+    if (tile.closest(`[data-v2f~="${SHELF_KEY}"]`)) continue
+
+    const thumb = pickQuiet('feedThumbnail', tile) ?? tile
+    const width = thumb.getBoundingClientRect().width
+    // A collapsed or not-yet-laid-out tile measures near zero; skip it.
+    if (width > 120) return width
+  }
+
+  return null
 }
 
 function arrowButton(direction: 'prev' | 'next', track: HTMLElement): HTMLElement {

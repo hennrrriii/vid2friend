@@ -57,6 +57,20 @@ export const SELECTORS = {
     'tp-yt-paper-item',
   ],
 
+  /**
+   * YouTube's own thumbnail inside a feed tile. Used purely as a ruler: the
+   * shelf measures one of these and sizes its cards to match, rather than
+   * guessing a column count. That is what keeps the cards exactly as large as
+   * the surrounding feed at any window width and zoom level.
+   */
+  feedThumbnail: [
+    'ytd-thumbnail a#thumbnail',
+    'yt-thumbnail-view-model',
+    'ytd-thumbnail',
+    'a#thumbnail',
+    '#thumbnail',
+  ],
+
   /** Anything that represents one video tile anywhere on the site. */
   videoTile: [
     'ytd-rich-item-renderer',
