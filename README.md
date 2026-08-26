@@ -1,22 +1,21 @@
 # vid2friend
 
 Freunde empfehlen sich gegenseitig YouTube-Videos, und die Empfehlungen erscheinen
-direkt ganz oben auf der YouTube-Startseite des Empfaengers. Kein Link mehr, der in
+direkt ganz oben auf der YouTube-Startseite des Empfängers. Kein Link mehr, der in
 WhatsApp untergeht.
 
 Chrome Extension (Manifest V3) + Supabase. Kein eigener Server, kein YouTube Data
 API Key, kein E-Mail-Login.
 
-> **Hinweis zum Stand:** Dieses README waechst mit dem Projekt. Aktuell ist
-> Meilenstein 1 (Grundgeruest) fertig. Die vollstaendige Anleitung inklusive
-> Supabase-Setup, Test zu zweit und Chrome-Web-Store-Veroeffentlichung kommt mit
-> Meilenstein 8. Was schon geht, steht unten.
+> **Stand:** Meilenstein 1 von 8 ist fertig (Grundgerüst). Die vollständige
+> Anleitung mit Supabase-Setup, Test zu zweit und Chrome-Web-Store-Veröffentlichung
+> entsteht Schritt für Schritt mit den weiteren Meilensteinen.
 
 ---
 
 ## 1. Voraussetzungen
 
-| Werkzeug | Version | Pruefen mit |
+| Werkzeug | Version | Prüfen mit |
 |---|---|---|
 | Node.js | 22 LTS oder 24 LTS empfohlen (getestet auch mit 23.9) | `node -v` |
 | npm | 10 oder neuer | `npm -v` |
@@ -25,28 +24,20 @@ API Key, kein E-Mail-Login.
 
 Node bekommst du von <https://nodejs.org>. Nimm die LTS-Version.
 
-**Bekannter Stolperstein unter Windows:** `npm install` bricht mit
-`Cannot read properties of null (reading 'edgesOut')` ab. Das ist ein Bug in
-npm 10.9 beim Aufloesen von Vitest' optionalen Peer-Dependencies, nicht dein
-Fehler. Loesung:
-
-```bash
-npm install --legacy-peer-deps
-```
-
 ## 2. Projekt einrichten
 
 ```bash
-git clone <dein-repo> vid2friend
-cd vid2friend
 npm install --legacy-peer-deps
 cp .env.example .env
 ```
 
-Die `.env` darf zum Bauen erstmal die Platzhalter behalten. Die Extension laedt
-dann trotzdem und zeigt im Popup den Hinweis "Setup incomplete". Wie du ein
-Supabase-Projekt anlegst und die zwei Werte findest, steht ab Meilenstein 2 hier
-im README.
+Das `--legacy-peer-deps` ist kein Schlamperei-Flag, sondern nötig: npm 10.9 hat
+einen Bug beim Auflösen der optionalen Peer-Dependencies von Vitest und bricht
+sonst mit `Cannot read properties of null (reading 'edgesOut')` ab.
+
+Die `.env` darf zum Bauen erstmal die Platzhalter behalten. Die Extension lädt
+trotzdem und zeigt im Popup den Hinweis "Setup incomplete". Das Supabase-Setup
+kommt mit Meilenstein 2 hierher.
 
 ## 3. Bauen und in Chrome laden
 
@@ -56,17 +47,17 @@ npm run build
 
 Das Ergebnis liegt in `dist/`. Dann:
 
-1. Chrome oeffnen, in die Adresszeile `chrome://extensions` eingeben.
+1. Chrome öffnen, in die Adresszeile `chrome://extensions` eingeben.
 2. Oben rechts **Entwicklermodus** einschalten.
 3. **Entpackte Erweiterung laden** klicken.
-4. Den Ordner `dist` auswaehlen (nicht das Projekt-Root, nicht `src`).
+4. Den Ordner `dist` auswählen (nicht das Projekt-Root, nicht `src`).
 
 <!-- SCREENSHOT: chrome://extensions mit aktiviertem Entwicklermodus und geladener vid2friend-Extension -->
 
-Danach solltest du das blaue vid2friend-Icon in der Toolbar sehen. Klick drauf:
-es oeffnet sich ein dunkles Popup mit vier Tabs.
+Danach siehst du das blaue vid2friend-Icon in der Toolbar. Klick drauf: es öffnet
+sich ein dunkles Popup mit vier Tabs.
 
-**Nach Code-Aenderungen:** entweder `npm run build` erneut ausfuehren und in
+**Nach Code-Änderungen:** entweder `npm run build` erneut ausführen und in
 `chrome://extensions` auf das Reload-Symbol bei vid2friend klicken, oder im
 Entwicklungsmodus arbeiten:
 
@@ -74,37 +65,59 @@ Entwicklungsmodus arbeiten:
 npm run dev
 ```
 
-Dabei laedt CRXJS die Extension bei Aenderungen weitgehend selbst neu. Das Popup
+Dabei lädt CRXJS die Extension bei Änderungen weitgehend selbst neu. Das Popup
 aktualisiert sich sofort, Content Script und Service Worker brauchen manchmal
 trotzdem einen manuellen Reload plus F5 auf dem YouTube-Tab.
 
-## 4. Pruefen, dass alles laeuft
+## 4. Prüfen, dass alles läuft
 
-- Icon in der Toolbar sichtbar, Popup oeffnet sich.
+- Icon in der Toolbar sichtbar, Popup öffnet sich.
 - In `chrome://extensions` bei vid2friend auf **Service Worker** klicken. Die
-  DevTools oeffnen sich und zeigen `[vid2friend] installed: install`.
-- <https://www.youtube.com> oeffnen, DevTools mit F12, Tab Console. Dort steht
+  DevTools öffnen sich und zeigen `[vid2friend] installed: install`.
+- <https://www.youtube.com> öffnen, DevTools mit F12, Tab Console. Dort steht
   `[vid2friend] content script ready on /`.
 - Wenn du in der Console nichts siehst: `localStorage.v2fDebug = '1'` eingeben
   und die Seite neu laden. Produktions-Builds loggen nur mit diesem Flag.
 
-## 5. Nuetzliche Kommandos
+## 5. GitHub
+
+Das Repo wird auf GitHub gehostet. Beim ersten Mal verbinden:
+
+```bash
+git branch -M main
+git remote add origin https://github.com/DEIN-NAME/vid2friend.git
+git push -u origin main
+```
+
+Die URL steht auf der Repo-Seite hinter dem grünen **Code**-Button (Tab HTTPS).
+Beim ersten Push öffnet der Git Credential Manager ein Browser-Fenster zum
+Einloggen; danach merkt Windows sich die Anmeldung.
+
+Wenn du das Repo auf GitHub mit einer README oder .gitignore angelegt hast, wird
+der erste Push abgelehnt (`rejected ... fetch first`). Dann einmal
+`git pull --rebase origin main`, danach den Push wiederholen.
+
+**Was nicht ins Repo gehört:** `.env`, `node_modules/`, `dist/` und die Zip-Datei
+für den Store. Das erledigt die `.gitignore` bereits. Der Supabase `service_role`
+Key darf nie irgendwo im Repo auftauchen.
+
+## 6. Nützliche Kommandos
 
 | Kommando | Was es tut |
 |---|---|
 | `npm run dev` | Entwicklungsserver mit Hot Reload |
 | `npm run build` | Typecheck plus Produktions-Build nach `dist/` |
-| `npm run typecheck` | Nur TypeScript pruefen |
+| `npm run typecheck` | Nur TypeScript prüfen |
 | `npm test` | Vitest einmal durchlaufen lassen |
 | `npm run icons` | Icons aus `public/icons/logo.svg` neu rendern |
 
-## 6. Projektstruktur
+## 7. Projektstruktur
 
 ```
 vid2friend/
 ├─ src/
 │  ├─ background/     Service Worker (Realtime, Badge, Polling)
-│  ├─ content/        Content Scripts fuer youtube.com
+│  ├─ content/        Content Scripts für youtube.com
 │  │  └─ selectors.ts ALLE DOM-Selektoren, zentral an einer Stelle
 │  ├─ popup/          React-Popup
 │  ├─ shared/         Supabase-Client, Typen, Slot-Logik, Storage
@@ -115,7 +128,7 @@ vid2friend/
 └─ CONTRIBUTING-NOTES.md  Entscheidungen und bekannte Schwachstellen
 ```
 
-## 7. Sprache
+## 8. Sprache
 
 Die Extension selbst ist komplett auf **Englisch** (UI, Code, Kommentare). Dieses
-README ist auf Deutsch.
+README und die Notizen sind auf Deutsch.
